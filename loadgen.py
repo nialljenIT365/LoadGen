@@ -285,7 +285,8 @@ def resolve_targets(doc: dict, total_vram_mb, total_ram_gb: float, unsafe: bool)
 # --------------------------------------------------------------------------
 
 class Nvml:
-    """NVML handle for the vGPU. Provides the GPU and VRAM Actuals."""
+    """NVML handle for the vGPU. Provides the VRAM Actual and a display-only
+    utilisation figure; see GpuEngineCounter for the gpu Actual."""
 
     def __init__(self) -> None:
         self.ok = False
@@ -343,7 +344,7 @@ class Nvml:
             self.ok = False
 
 
-# --- Windows "GPU Engine" performance counter, display only ----------------
+# --- Windows "GPU Engine" performance counter: the gpu Actual --------------
 
 PDH_FMT_DOUBLE = 0x00000200
 PDH_MORE_DATA = 0x800007D2
@@ -360,10 +361,12 @@ class _CounterItem(ctypes.Structure):
 class GpuEngineCounter:
     """Task Manager's GPU figure, sampled on a background thread.
 
-    Display only: the Self-check never chases it. Windows reports one instance
+    This is the gpu Actual the Self-check chases. Windows reports one instance
     per process per engine; Task Manager shows the busiest engine type, so the
     instances are summed within an engine type and the largest is reported.
-    Any failure yields None and the console prints `--`.
+    Any failure yields None: the gpu Dial then holds its seeded duty and warns
+    once. On the A10-8Q this counter followed a duty-cycled load to within
+    about 5 points while NVML utilisation did not follow it at all.
     """
 
     PATH = r"\GPU Engine(*)\Utilization Percentage"
@@ -913,7 +916,7 @@ def main(argv=None) -> int:
         log_writer = csv.writer(log_handle)
         if new_file:
             log_writer.writerow([
-                "timestamp", "users", "gpu_t", "gpu_a", "gpu_tm",
+                "timestamp", "users", "gpu_t", "gpu_a", "gpu_nvml",
                 "vram_t", "vram_a", "cpu_t", "cpu_a", "ram_t", "ram_a",
             ])
 
@@ -927,6 +930,7 @@ def main(argv=None) -> int:
     psutil.cpu_percent(interval=None)  # prime the delta-based reading
     warnings = ClampWarnings()
     gpu_missing_warned = False
+    gpu_blind_warned = False
     deadline = time.monotonic() + args.duration if args.duration else None
     started_at = time.monotonic()
 
@@ -943,10 +947,13 @@ def main(argv=None) -> int:
             vmem = psutil.virtual_memory()
             ram_actual = vmem.percent
             ram_in_use = float(vmem.total - vmem.available)
-            gpu_actual = nvml.utilization() if targets["gpu"] or nvml.ok else None
+            # The gpu Actual is Task Manager's figure, the GPU Engine counter.
+            # NVML utilisation is read for display only: on the A10-8Q it does
+            # not follow this guest's work (docs/verification-findings.md).
+            gpu_actual = engine_counter.value
+            nvml_actual = nvml.utilization() if nvml.ok else None
             memory = nvml.memory() if nvml.ok else None
             vram_actual = memory[0] / memory[1] * 100.0 if memory else None
-            engine_actual = engine_counter.value
 
             # --- a dial that needs torch but has none: say so once, keep going ---
             if (targets["gpu"] or targets["vram"]) and not (
@@ -956,6 +963,13 @@ def main(argv=None) -> int:
                     reason = gpu_load.error or vram_load.error or "no GPU stack"
                     warn(f"gpu/vram target set mid-run but {reason}; holding at 0")
                     gpu_missing_warned = True
+
+            # --- no gpu Actual: the Dial runs open-loop at Target/100, say so once ---
+            if targets["gpu"] > 0.0 and gpu_load.ready and gpu_actual is None:
+                if not gpu_blind_warned and engine_counter.value is None:
+                    warn("gpu Actual unavailable (GPU Engine counter not readable);"
+                         " holding duty at Target/100 without correction")
+                    gpu_blind_warned = True
 
             # --- correct ---
             # A Dial at 0 is left alone: no correction, no allocation and no
@@ -1002,7 +1016,7 @@ def main(argv=None) -> int:
                 parts.append(f" users {users:3.0f} |")
             parts.append(
                 f" gpu {fmt_pct(targets['gpu'])}/{fmt_pct(gpu_actual)}"
-                f" (tm {fmt_pct(engine_actual)}) |"
+                f" (nvml {fmt_pct(nvml_actual)}) |"
                 f" vram {fmt_pct(targets['vram'])}/{fmt_pct(vram_actual)} |"
                 f" cpu {fmt_pct(targets['cpu'])}/{fmt_pct(cpu_actual)} |"
                 f" ram {fmt_pct(targets['ram'])}/{fmt_pct(ram_actual)}"
@@ -1018,7 +1032,7 @@ def main(argv=None) -> int:
                     "" if users is None else f"{users:g}",
                     f"{targets['gpu']:.1f}",
                     "" if gpu_actual is None else f"{gpu_actual:.1f}",
-                    "" if engine_actual is None else f"{engine_actual:.1f}",
+                    "" if nvml_actual is None else f"{nvml_actual:.1f}",
                     f"{targets['vram']:.1f}",
                     "" if vram_actual is None else f"{vram_actual:.1f}",
                     f"{targets['cpu']:.1f}",

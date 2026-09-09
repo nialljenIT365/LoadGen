@@ -2,7 +2,7 @@
 
 The CSV is written by `loadgen.py --log PATH`, one row per 2 s tick:
 
-    timestamp, users, gpu_t, gpu_a, gpu_tm, vram_t, vram_a,
+    timestamp, users, gpu_t, gpu_a, gpu_nvml, vram_t, vram_a,
     cpu_t, cpu_a, ram_t, ram_a
 
 An Actual is written as an empty field when the reading was unavailable and as
