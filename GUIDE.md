@@ -682,12 +682,14 @@ need you to capture a Baseline first. The reasoning is in
   running. If LoadGen is running the Profiler will warn you — stop LoadGen and
   start again, because otherwise you will measure LoadGen's synthetic load and
   call it a user.
-- Open [CHECKLIST.md](CHECKLIST.md) and read it. **Replace the generic office
-  steps with your real app set** before a run you intend to act on. A profile
-  of five browser tabs is worthless if your users spend the day in Revit.
+- Open [CHECKLIST.md](CHECKLIST.md) and read it. **Check the app list matches
+  your image** before a run you intend to act on. A profile of five browser tabs
+  is worthless if your users spend the day in Revit.
   [docs/reference-session-checklist.html](docs/reference-session-checklist.html)
-  is a worked example for a design and engineering image — open it in a browser
-  to tick items off as you go, or print it.
+  is the same list as a tick sheet — open it in a browser to tick items off as
+  you go, or print it.
+- Decide which persona this run is for, Standard or GPU, and follow only that
+  section. Running both in one session measures a user who does not exist.
 - Do not open the apps yet. Launching them is part of what a user costs, and
   the Profiler should be running when it happens.
 
@@ -706,7 +708,7 @@ Reference Session actually costs:
 
 ```
 session 3 as jdoe on AVD-NV12-01
-checklist: office-generic v1
+checklist: design-engineering v1
 tick 2s, warm-up 60s discarded, 1200s
 output folder: C:\Users\jdoe\Documents\LoadGen
 
