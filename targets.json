@@ -1,0 +1,13 @@
+{
+  "users": 15,
+  "per_user": {
+    "gpu": 4,
+    "cpu": 6,
+    "vram_mb": 300,
+    "ram_gb": 2.5
+  },
+  "gpu": null,
+  "vram": null,
+  "cpu": null,
+  "ram": null
+}

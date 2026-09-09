@@ -1,0 +1,7 @@
+# Install torch first, from the CUDA index chosen in the README -- it is not
+# listed here because its wheel comes from a separate index URL.
+psutil==7.2.2
+# 12.x tracks the CUDA 12 / GRID R5xx driver family on the host. Newer 13.x
+# releases work for these calls too, but there is no reason to run ahead of the
+# driver.
+nvidia-ml-py==12.575.51
