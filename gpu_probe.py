@@ -8,8 +8,14 @@ If achieved throughput is a plausible fraction of the card's peak while NVML
 reports 0% utilisation, the instrument is wrong and the load is fine. If
 throughput collapses and the SM clock sits at idle, the load is wrong.
 
-    python gpu_probe.py            # 15 s
+    python gpu_probe.py            # 15 s, flat out
     python gpu_probe.py --seconds 60 --vram-fill 95
+    python gpu_probe.py --seconds 30 --duty 0.7   # the busy/sleep cycle GpuLoad uses
+
+While it runs it also reads Task Manager's GPU Engine counter, the `tm`
+column in loadgen.py, so the two candidate feedback signals are judged
+against the same load. --duty is for that comparison: a signal that can
+carry the gpu Dial reads near duty x 100 with little spread.
 
 --vram-fill reproduces the condition of the 14:47 capture, where the vram Dial
 was holding 95% of an 8 GB frame buffer while the gpu Dial fell to 0.
@@ -111,9 +117,14 @@ def main() -> int:
     ap.add_argument("--seconds", type=float, default=15.0)
     ap.add_argument("--vram-fill", type=float, default=0.0,
                     help="fill the frame buffer to this percent before starting")
+    ap.add_argument("--duty", type=float, default=1.0,
+                    help="fraction of each 200 ms period to run, as GpuLoad does;"
+                         " 1.0 is flat out")
     args = ap.parse_args()
+    duty = min(max(args.duty, 0.05), 1.0)
 
     import torch
+    from loadgen import GPU_PERIOD, GpuEngineCounter
 
     if not torch.cuda.is_available():
         print("torch reports no CUDA device")
@@ -151,12 +162,19 @@ def main() -> int:
         return 3
 
     samples = []
+    tm_samples = []  # Task Manager's GPU Engine counter, read once a second
     stop = threading.Event()
+    engine = GpuEngineCounter()
+    engine.start()
 
     def poll():
+        n = 0
         while not stop.is_set():
             if handle is not None:
                 samples.append(sample_nvml(handle, pynvml))
+            if n % 5 == 0 and engine.value is not None:
+                tm_samples.append(float(engine.value))
+            n += 1
             stop.wait(SAMPLE_SECONDS)
 
     poller = threading.Thread(target=poll, daemon=True)
@@ -172,29 +190,42 @@ def main() -> int:
         print(f"warm-up matmul failed: {str(exc).splitlines()[0][:120]}")
         return 3
     samples.clear()
+    tm_samples.clear()
 
-    print(f"running {N}x{N} fp16 matmul flat out for {args.seconds:.0f}s ...")
+    how = "flat out" if duty >= 1.0 else f"at duty {duty:.2f} of each {GPU_PERIOD * 1000:.0f} ms"
+    print(f"running {N}x{N} fp16 matmul {how} for {args.seconds:.0f}s ...")
     iters = 0
-    started = time.perf_counter()
+    clock = time.perf_counter
+    started = clock()
     deadline = started + args.seconds
     per_second = []
     mark, mark_iters = started, 0
     try:
-        while time.perf_counter() < deadline:
-            torch.matmul(a, b, out=c)
-            torch.cuda.synchronize()
-            iters += 1
-            now = time.perf_counter()
+        while clock() < deadline:
+            # the same busy/sleep cycle as GpuLoad._run
+            busy = GPU_PERIOD * duty
+            cycle_start = clock()
+            end = cycle_start + busy
+            while clock() < end:
+                torch.matmul(a, b, out=c)
+                torch.cuda.synchronize()
+                iters += 1
+            now = clock()
             if now - mark >= 1.0:
                 per_second.append((iters - mark_iters) / (now - mark))
                 mark, mark_iters = now, iters
+            rest = GPU_PERIOD - (now - cycle_start)
+            if duty < 1.0 and rest > 0.0005:
+                time.sleep(rest)
     except Exception as exc:
         print(f"matmul failed after {iters} iterations: {exc}")
         stop.set()
+        engine.stop()
         return 3
-    elapsed = time.perf_counter() - started
+    elapsed = clock() - started
     stop.set()
     poller.join(timeout=2.0)
+    engine.stop()
 
     tflops = iters * FLOP_PER_MATMUL / elapsed / 1e12
     print()
@@ -218,33 +249,54 @@ def main() -> int:
         print(f"nvml temp       {summarise(samples, 'temp_c')} C")
         print(f"nvml mem.used   {summarise(samples, 'mem_used_mb')} MiB")
 
+    if tm_samples:
+        print(f"task manager    min {min(tm_samples):.1f}  mean {statistics.mean(tm_samples):.1f}"
+              f"  max {max(tm_samples):.1f}  sd {statistics.pstdev(tm_samples):.1f}"
+              f"  ({len(tm_samples)} samples every 1s; the tm column in loadgen.py)")
+    else:
+        print("task manager    unavailable (GPU Engine counter not readable here)")
+
     print()
-    busy = tflops > 1.0
+    busy = tflops > 1.0 * duty
+    expected = duty * 100.0
     where = f" with the frame buffer at {filled_mib:.0f} MiB" if filled_mib else ""
+
+    def follows(values):
+        """A signal is usable as feedback if it sits near the duty with little spread."""
+        mean = statistics.mean(values)
+        sd = statistics.pstdev(values) if len(values) > 1 else 0.0
+        return abs(mean - expected) <= 10.0 and sd <= 15.0, mean, sd
+
     if not utils:
         print("VERDICT: NVML reports no utilisation figure on this host at all.")
-        print("         The gpu Dial cannot close its loop here. Drive it open-loop")
-        print("         and say so in README.md and GUIDE.md.")
     elif not busy:
         print(f"VERDICT: throughput is near zero{where}. The load itself is failing,")
         print("         not the measurement. Look at GpuLoad._run, not at NVML.")
     else:
-        mean = statistics.mean(utils)
-        sd = statistics.pstdev(utils) if len(utils) > 1 else 0.0
-        if mean < 10.0:
+        ok, mean, sd = follows(utils)
+        if ok:
+            print(f"VERDICT: NVML utilisation follows the load{where}: read {mean:.0f}"
+                  f" +/- {sd:.0f}")
+            print(f"         against a duty of {expected:.0f}. The instrument is sound here.")
+        elif expected >= 50.0 and mean < 10.0:
             print(f"VERDICT: the GPU is doing real work{where} and NVML reads idle.")
             print("         The defect is in the instrument, not the load thread.")
-            print("         loadgen.py must stop closing its loop on this reading.")
-        elif mean < 80.0 or sd > 20.0:
-            print(f"VERDICT: the GPU was busy for the whole run{where}, yet NVML")
-            print(f"         utilisation read {mean:.0f} +/- {sd:.0f}. A counter that")
-            print("         tracked this guest's work would sit near 100 with little")
+        else:
+            print(f"VERDICT: the GPU ran at a duty of {expected:.0f} for the whole run{where},")
+            print(f"         yet NVML utilisation read {mean:.0f} +/- {sd:.0f}. A counter that")
+            print(f"         tracked this guest's work would sit near {expected:.0f} with little")
             print("         spread. This one does not follow the load; the gpu Dial")
             print("         cannot close its loop on it.")
+    if busy and tm_samples:
+        ok, mean, sd = follows(tm_samples)
+        if ok:
+            print(f"         Task Manager's GPU Engine counter (tm) read {mean:.0f} +/- {sd:.0f}")
+            print(f"         against a duty of {expected:.0f}: it follows the load and")
+            print("         can carry the gpu Dial's feedback instead.")
         else:
-            print(f"VERDICT: throughput and NVML agree{where}. The instrument is")
-            print("         sound here; reproduce the collapse with --vram-fill 95")
-            print("         before concluding.")
+            print(f"         Task Manager's GPU Engine counter (tm) read {mean:.0f} +/- {sd:.0f}")
+            print(f"         against a duty of {expected:.0f}: it does not follow the load")
+            print("         either.")
 
     del blocks
     return 0
