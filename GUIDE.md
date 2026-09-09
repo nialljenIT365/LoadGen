@@ -41,7 +41,7 @@ in [CONTEXT.md](CONTEXT.md).
 | **Users** | A count of simulated users. Sets the Targets when you do not set them yourself. |
 | **User Profile** | What one typical user costs, as one number per resource. Multiplied by Users to get Targets. |
 
-**The one idea that matters.** A Target is the **overall** figure a Consumer
+**How a Target works.** A Target is the **overall** figure a Consumer
 shows — not LoadGen's own share of it. Ask for `cpu 60` on a machine already
 sitting at 15%, and LoadGen adds roughly 45 so Task Manager reads 60. It
 re-measures every 2 seconds and keeps correcting. The reasoning is in
@@ -255,7 +255,7 @@ That installs `psutil==7.2.2` (reads CPU and RAM) and
 `nvidia-ml-py==12.575.51` (reads the GPU through NVML, the same interface
 `nvidia-smi` uses).
 
-### Check — this is the important one
+### Check — torch must reach the GPU
 
 ```powershell
 python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
@@ -377,8 +377,8 @@ contributing.
 python loadgen.py --gpu 40 --vram 25 --duration 60s
 ```
 
-> **Be aware:** the CPU, RAM, targets-file and clean-exit paths have been tested
-> and work. **The GPU and VRAM paths have never been run against real NVIDIA
+> **Coverage note:** the CPU, RAM, targets-file and clean-exit paths have been
+> tested and work. **The GPU and VRAM paths have never been run against real NVIDIA
 > hardware** — this host is their first run. Treat the results below as *what
 > should happen*, and check them rather than assume them.
 
@@ -403,7 +403,7 @@ point would be fiction.
 
 ---
 
-## Step 6 — The thing you will actually do: retarget a running test
+## Step 6 — Retarget a running test
 
 **`targets.json` is the sole source of truth once a run has started.**
 
@@ -630,7 +630,7 @@ Use it whenever a run is producing numbers someone will act on.
 
 ## What is proven and what is not
 
-Keep this in mind when you report results.
+Applies when you report results.
 
 **Verified** on a development machine with no NVIDIA GPU: CPU Dial convergence,
 RAM fill and release, the below-Baseline warning, invalid-JSON handling, live
