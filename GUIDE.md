@@ -696,7 +696,10 @@ From the same folder, with the venv activated:
 python profiler.py --duration 20m
 ```
 
-You will see:
+You will see something like the following. **The user name `jdoe`, the host name
+`AVD-NV12-01`, the date and every number below are examples** — yours will show
+your own signed-in account, this host's name, today's date and whatever the
+Reference Session actually costs:
 
 ```
 session 3 as jdoe on AVD-NV12-01
@@ -728,7 +731,8 @@ working day.
 #### 8d. Stop it
 
 Press **Ctrl+C**, or let `--duration` end the run. Either way it writes the
-files. You get a summary:
+files. You get a summary — again, **the account name, the timestamp in the file
+names and all the figures below are examples**, not values to expect:
 
 ```
 601 ticks, 571 retained after warm-up, 4 processes skipped
@@ -754,7 +758,10 @@ rather than the four summary numbers.
 
 #### 8e. Use it
 
-Copy the `.json` to the machine you run LoadGen from, then:
+Copy the `.json` to the machine you run LoadGen from, then point `--profile` at
+it. **Substitute your own file name** — the path below is an example, built from
+the example account and timestamp above. Use the exact path the Profiler printed
+in its `wrote` line:
 
 ```
 python loadgen.py --profile "C:\Users\jdoe\Documents\LoadGen\profile-jdoe-2026-09-09-1015.json" --users 15

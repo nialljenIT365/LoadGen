@@ -190,7 +190,8 @@ NVML-to-GPU-Engine ratio so any scale mismatch between the two Consumers is
 visible. The `.csv` has one row per retained tick:
 `timestamp, procs, cpu, ram_gb, gpu, vram_mb, host_gpu_nvml, host_gpu_engine`.
 
-Then feed it to LoadGen:
+Then feed it to LoadGen. The account name and timestamp in the path below are an
+example — use the path the Profiler printed when it wrote the file:
 
 ```
 python loadgen.py --profile "C:\Users\jdoe\Documents\LoadGen\profile-jdoe-2026-09-09-1015.json" --users 15
