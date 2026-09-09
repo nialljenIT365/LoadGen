@@ -384,7 +384,7 @@ This is a large download — expect a few minutes.
 
 > **Why isn't this pinned in `requirements.txt` like everything else?** Because
 > the right answer depends on the driver installed on *this* host, and
-> `requirements.txt` cannot know that. It is a deliberate gap, not an omission.
+> `requirements.txt` cannot know that.
 
 ### 4b. The rest
 
