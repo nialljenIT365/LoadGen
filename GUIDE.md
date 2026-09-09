@@ -16,9 +16,10 @@ the GPU read 60%" and it holds the machine there until you stop it.
   **A10-8Q vGPU** with an 8 GB frame buffer. A vGPU is a slice of a physical
   NVIDIA card shared between several VMs; the "8Q" part means this VM gets 8 GB
   of that card's memory.
-- A copy of this repository on the host (clone it, or copy the folder over).
+- Outbound internet access from the host, for `winget`, GitHub and PyPI. Step 2
+  covers getting the code onto the machine.
 
-**Time:** about 20 minutes, most of it waiting for downloads.
+**Time:** about 25 minutes, most of it waiting for downloads.
 
 Work through the sections in order. Each one ends with a **Check** — do not move
 on until the check passes.
@@ -49,7 +50,7 @@ re-measures every 2 seconds and keeps correcting. The reasoning is in
 
 One consequence to know now: **if you ask for a Target lower than the Baseline,
 LoadGen cannot get there.** It will not shut anything down to make room. It says
-so and carries on. That is covered in Step 5.
+so and carries on. That is covered in Step 6.
 
 ---
 
@@ -101,7 +102,7 @@ Three things to confirm:
    buffer. A much smaller number means a different vGPU profile than expected —
    stop and check with whoever built the host.
 3. **Write down the `CUDA Version` from the header.** In the example above it is
-   `12.4`. **You need this number in Step 4.** It is not the driver version and
+   `12.4`. **You need this number in Step 5.** It is not the driver version and
    it is not the NVIDIA-SMI version — it is the third field on that top line.
 
 > Fields showing `N/A` for fan, temperature and power are **normal** on a vGPU.
@@ -151,7 +152,147 @@ The A10 should appear with `Status: OK`.
 
 ---
 
-## Step 2 — Install Python
+## Step 2 — Get a local copy of the repo onto the host
+
+Everything from here runs from the repository folder on the session host.
+Two ways to get it there: **git clone** (2a — preferred, because updating later
+is one command) or a **ZIP download** (2b — if git cannot be installed).
+
+### Where to put it
+
+Put the folder on the local disk, not in a user profile that roams or syncs:
+
+```powershell
+New-Item -ItemType Directory -Force C:\Tools
+cd C:\Tools
+```
+
+On a multi-session host, profile folders (Desktop, Documents, OneDrive) may be
+redirected or held in an FSLogix container, which can make the venv you build in
+Step 4 break or vanish between sessions. `C:\Tools` is a plain local path and
+avoids all of that. Any local folder will do — the rest of this guide writes it
+as `C:\Tools\LoadGen`.
+
+### 2a. Clone with git (preferred)
+
+Install git first. It is not on a fresh session host:
+
+```powershell
+winget install Git.Git
+```
+
+**Close PowerShell and open a new one** — the installer puts git on PATH and an
+already-open shell will not see it.
+
+Check git is available:
+
+```powershell
+git --version
+```
+
+Expected — a version number, e.g.:
+
+```
+git version 2.55.0.windows.1
+```
+
+Now clone. The repository is **public**, so no credentials, token or GitHub
+account is needed:
+
+```powershell
+cd C:\Tools
+git clone https://github.com/nialljenIT365/LoadGen.git
+cd LoadGen
+```
+
+Expected:
+
+```
+Cloning into 'LoadGen'...
+remote: Enumerating objects: ...
+Receiving objects: 100% ...
+Resolving deltas: 100% ...
+```
+
+**To pick up later changes**, from inside `C:\Tools\LoadGen`:
+
+```powershell
+git pull
+```
+
+> `git pull` will refuse if you have edited `targets.json` in place. That is
+> fine — `targets.json` is rewritten at every launch anyway. Discard your copy
+> with `git checkout -- targets.json` and pull again.
+
+### 2b. ZIP download (if git is unavailable)
+
+If winget is blocked or git is not permitted on the host, download the code
+directly:
+
+```powershell
+cd C:\Tools
+Invoke-WebRequest -Uri "https://github.com/nialljenIT365/LoadGen/archive/refs/heads/main.zip" -OutFile "LoadGen.zip"
+Expand-Archive -Path "LoadGen.zip" -DestinationPath "C:\Tools" -Force
+Rename-Item "C:\Tools\LoadGen-main" "C:\Tools\LoadGen"
+Remove-Item "LoadGen.zip"
+cd C:\Tools\LoadGen
+```
+
+GitHub's ZIP of a branch extracts to a folder named `<repo>-<branch>`, which is
+why the `Rename-Item` line is there.
+
+Windows marks files from a downloaded ZIP as blocked, which can stop scripts
+running. Clear that:
+
+```powershell
+Get-ChildItem -Recurse | Unblock-File
+```
+
+With this route there is no `git pull` — to update, download the ZIP again and
+replace the folder.
+
+### Check
+
+You should now be in the repo folder with the code present:
+
+```powershell
+Get-Location
+Get-ChildItem -Name
+```
+
+Expected — the path is your repo folder, and these files are listed:
+
+```
+C:\Tools\LoadGen
+
+CONTEXT.md
+GUIDE.md
+README.md
+docs
+loadgen.py
+requirements.txt
+targets.json
+```
+
+- [ ] `loadgen.py`, `requirements.txt` and `targets.json` are all present.
+- [ ] You are inside that folder (`Get-Location` shows it).
+
+If `Get-ChildItem` shows a single nested folder instead of these files, you are
+one level too high — `cd` into the folder it lists and check again.
+
+### If the check fails
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `winget : The term 'winget' is not recognized` | App Installer missing on the host image. | Install "App Installer" from the Microsoft Store, or use route 2b with `Invoke-WebRequest`. |
+| `git : The term 'git' is not recognized` after installing | PATH not refreshed. | Close PowerShell, open a new one. |
+| `fatal: unable to access ... Could not resolve host: github.com` | No outbound internet, or a proxy is required. | Confirm the host can reach the internet. If a proxy is in use, set `git config --global http.proxy http://<proxy>:<port>` and retry. |
+| `fatal: destination path 'LoadGen' already exists and is not an empty directory` | The folder is already there. | `cd LoadGen; git pull` to update it instead of cloning again. |
+| `Invoke-WebRequest` fails with a TLS or protocol error | Older TLS default. | Run `[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12` in the same shell, then retry. |
+
+---
+
+## Step 3 — Install Python
 
 Python is **not** installed on a fresh session host. LoadGen needs Python 3.12
 specifically — not the newest release — because that is the version the GPU
@@ -182,7 +323,7 @@ and read its output for an error.
 
 ---
 
-## Step 3 — Create the virtual environment
+## Step 4 — Create the virtual environment
 
 A virtual environment ("venv") is a private folder of Python packages for this
 one tool, so installing it cannot disturb anything else on the host.
@@ -190,7 +331,7 @@ one tool, so installing it cannot disturb anything else on the host.
 From inside the repository folder:
 
 ```powershell
-cd C:\path\to\LoadGen
+cd C:\Tools\LoadGen
 py -3.12 -m venv .venv
 .venv\Scripts\activate
 ```
@@ -200,7 +341,7 @@ py -3.12 -m venv .venv
 Your prompt should now be prefixed with `(.venv)`:
 
 ```
-(.venv) PS C:\path\to\LoadGen>
+(.venv) PS C:\Tools\LoadGen>
 ```
 
 Confirm the venv's Python is the one in use:
@@ -224,7 +365,7 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
 ---
 
-## Step 4 — Install the packages
+## Step 5 — Install the packages
 
 Two installs, in this order.
 
@@ -275,7 +416,7 @@ continue — the GPU and VRAM Dials will not work. Common causes:
 
 - You installed the **CPU-only** build. A version string with no `+cu` suffix
   (e.g. `2.6.0` rather than `2.6.0+cu126`) means the `--index-url` was missing
-  or mistyped. Run `pip uninstall torch`, then redo Step 4a.
+  or mistyped. Run `pip uninstall torch`, then redo Step 5a.
 - You picked the wrong index for the driver. Re-read the CUDA Version from
   Step 1b and try the other row of the table.
 - The GPU check in Step 1 did not actually pass. Go back and repeat it.
@@ -291,7 +432,7 @@ open the GPU — the same causes as above apply.
 
 ---
 
-## Step 5 — First run
+## Step 6 — First run
 
 Start with a short CPU-only run. It touches no GPU, so it isolates "is LoadGen
 working" from "is the GPU working".
@@ -306,7 +447,7 @@ Real output from a 12-vCPU machine. This capture used `--duration 12s` to keep
 it short; a 60-second run looks identical with more ticks:
 
 ```
-targets file: C:\path\to\LoadGen\targets.json (re-read every 2s)
+targets file: C:\Tools\LoadGen\targets.json (re-read every 2s)
 cpu: 12 workers started
 10:57:51  gpu   0/ -- (tm  --) | vram   0/ -- | cpu  30/100 | ram   0/ 60
 10:57:53  gpu   0/ -- (tm   3) | vram   0/ -- | cpu  30/ 36 | ram   0/ 60
@@ -403,7 +544,7 @@ point would be fiction.
 
 ---
 
-## Step 6 — Retarget a running test
+## Step 7 — Retarget a running test
 
 **`targets.json` is the sole source of truth once a run has started.**
 
@@ -479,7 +620,7 @@ Save a half-finished edit and LoadGen warns once and **keeps the last good
 values** — the load does not drop:
 
 ```
-warning: cannot read C:\path\to\LoadGen\targets.json (<the JSON parser's complaint>); keeping last good values
+warning: cannot read C:\Tools\LoadGen\targets.json (<the JSON parser's complaint>); keeping last good values
 ```
 
 The text in brackets is Python's own description of what is wrong with the file
@@ -488,7 +629,7 @@ The text in brackets is Python's own description of what is wrong with the file
 Fix the file and save again. It confirms recovery:
 
 ```
-C:\path\to\LoadGen\targets.json readable again
+C:\Tools\LoadGen\targets.json readable again
 ```
 
 ### Safety limits
@@ -501,7 +642,7 @@ flag.
 
 ---
 
-## Step 7 — Fix the User Profile before you trust any number
+## Step 8 — Fix the User Profile before you trust any number
 
 The **User Profile** is what LoadGen assumes one typical user costs. It is the
 `per_user` block in `targets.json`, and the shipped values are:
@@ -539,7 +680,7 @@ Repeat this whenever the app set on the host changes.
 
 ---
 
-## Step 8 — Stopping, and confirming the load is released
+## Step 9 — Stopping, and confirming the load is released
 
 ### Stop it
 
@@ -584,14 +725,17 @@ Only once all three look normal is the host clean for the next test.
 |---|---|---|
 | `nvidia-smi : The term 'nvidia-smi' is not recognized...` | Driver missing, or not on PATH. | Try the full path under `C:\Program Files\NVIDIA Corporation\NVSMI\`. If absent, install the GRID guest driver. See Step 1. |
 | `Failed to initialize NVML: Unknown Error` | Driver loaded but cannot reach the device. | Reboot. If it persists, the driver may not match the host's vGPU manager — escalate. |
+| `winget : The term 'winget' is not recognized` | App Installer missing from the host image. | Install "App Installer" from the Microsoft Store, or use the ZIP route in Step 2b. |
+| `git : The term 'git' is not recognized` | PATH not refreshed after installing git. | Close PowerShell, open a new one. |
+| `fatal: destination path 'LoadGen' already exists and is not an empty directory` | Already cloned. | `cd LoadGen; git pull` instead of cloning again. |
 | `py : The term 'py' is not recognized` | PATH not refreshed after installing Python. | Close PowerShell, open a new one. |
 | `.venv\Scripts\activate` refused, execution-policy message | PowerShell script execution is restricted. | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`, then retry. |
-| `torch.cuda.is_available()` returns `False` | CPU-only torch, or wrong CUDA index. | Check the version string has a `+cu` suffix. If not, `pip uninstall torch` and redo Step 4a with the right index URL. |
-| `error: psutil is required. pip install -r requirements.txt` | The venv is not active, or Step 4b was skipped. | Activate the venv, then `pip install -r requirements.txt`. |
-| `error: a gpu or vram target was requested but nvidia-ml-py is not installed (No module named 'pynvml').` | Step 4b was skipped. | `pip install -r requirements.txt`. Or run CPU/RAM only with `--gpu 0 --vram 0`. |
+| `torch.cuda.is_available()` returns `False` | CPU-only torch, or wrong CUDA index. | Check the version string has a `+cu` suffix. If not, `pip uninstall torch` and redo Step 5a with the right index URL. |
+| `error: psutil is required. pip install -r requirements.txt` | The venv is not active, or Step 5b was skipped. | Activate the venv, then `pip install -r requirements.txt`. |
+| `error: a gpu or vram target was requested but nvidia-ml-py is not installed (No module named 'pynvml').` | Step 5b was skipped. | `pip install -r requirements.txt`. Or run CPU/RAM only with `--gpu 0 --vram 0`. |
 | `error: a gpu or vram target was requested but NVML could not open the GPU (...)` | NVML cannot reach the vGPU. | Re-run Step 1. The message's second line suggests checking the GRID guest driver. |
 | `error: a gpu or vram target was requested but could not allocate the GPU work tensors (...)` | torch reached the GPU but could not get memory. | Something else is holding the frame buffer — check `nvidia-smi` for other processes. Or lower the `vram` Target. |
-| `warning: ram target 20 is below the current Baseline (61); contributing nothing` | The Target is under what the machine already uses. | Expected, not a fault. Raise the Target above the Baseline. See Step 5. |
+| `warning: ram target 20 is below the current Baseline (61); contributing nothing` | The Target is under what the machine already uses. | Expected, not a fault. Raise the Target above the Baseline. See Step 6. |
 | `warning: cannot read ...targets.json (...); keeping last good values` | Invalid JSON saved. | Fix the syntax and save again; the load never dropped. |
 | `warning: gpu/vram target set mid-run but ...; holding at 0` | A GPU Dial was raised in `targets.json` on a run with no GPU stack. | Deliberate — a long CPU/RAM test will not die over a typo. Restart with the GPU stack installed if you need that Dial. |
 | `gpu` Actual stays `--` or 0 during a GPU run | NVML cannot read utilisation, or the GPU load never started. | Cross-check with `nvidia-smi -l 2` in a second window. This path is unverified on real hardware — capture both outputs and report. |
