@@ -13,6 +13,10 @@ throughput collapses and the SM clock sits at idle, the load is wrong.
 
 --vram-fill reproduces the condition of the 14:47 capture, where the vram Dial
 was holding 95% of an 8 GB frame buffer while the gpu Dial fell to 0.
+
+The fill stops early if a block lands in shared system memory instead of the
+frame buffer. On a WDDM guest cudaMalloc does not fail when the frame buffer
+is full; the driver spills into host RAM and NVML memory.used stops rising.
 """
 
 from __future__ import annotations
@@ -24,6 +28,10 @@ import time
 
 N = 2048  # must match GPU_MATMUL_N in loadgen.py
 FLOP_PER_MATMUL = 2.0 * N * N * N
+BLOCK = 64 * 1024 * 1024
+HEADROOM = 256 * 1024 * 1024  # kept free for the work tensors and cuBLAS workspace
+SAMPLE_SECONDS = 0.2
+MIB = 1048576.0
 
 
 def sample_nvml(handle, pynvml):
@@ -56,6 +64,48 @@ def summarise(samples, key):
     )
 
 
+def histogram(values):
+    """Bucket counts, so a bimodal 0/100 counter is told apart from a noisy one."""
+    buckets = ((0, 0, "0"), (1, 24, "1-24"), (25, 49, "25-49"),
+               (50, 74, "50-74"), (75, 99, "75-99"), (100, 100, "100"))
+    return "  ".join(
+        f"{label}:{sum(1 for v in values if lo <= v <= hi)}"
+        for lo, hi, label in buckets
+    )
+
+
+def fill_vram(torch, pynvml, handle, percent):
+    """Hold 64 MiB blocks until NVML memory.used reaches `percent` of total.
+
+    Each block is checked: if memory.used did not rise by at least half a block
+    within a second, the block went to shared system memory. It is freed and
+    the fill stops there. Returns (blocks, reason).
+    """
+    total = pynvml.nvmlDeviceGetMemoryInfo(handle).total
+    want = total * percent / 100.0
+    blocks = []
+    while True:
+        used = pynvml.nvmlDeviceGetMemoryInfo(handle).used
+        if used >= want:
+            return blocks, "reached the target"
+        if total - used < BLOCK + HEADROOM:
+            return blocks, f"kept {HEADROOM / MIB:.0f} MiB free for the work tensors"
+        try:
+            blocks.append(torch.empty(BLOCK, dtype=torch.uint8, device="cuda"))
+        except RuntimeError as exc:
+            return blocks, f"allocation failed ({str(exc).splitlines()[0][:90]})"
+        for _ in range(10):
+            after = pynvml.nvmlDeviceGetMemoryInfo(handle).used
+            if after - used >= BLOCK // 2:
+                break
+            time.sleep(0.1)
+        else:
+            blocks.pop()
+            torch.cuda.empty_cache()
+            return blocks, ("the next block landed in shared system memory, not the"
+                            " frame buffer; cudaMalloc oversubscribes on this host")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seconds", type=float, default=15.0)
@@ -82,23 +132,23 @@ def main() -> int:
         pynvml = handle = None
 
     blocks = []
+    filled_mib = None
     if args.vram_fill > 0.0 and handle is not None:
+        blocks, reason = fill_vram(torch, pynvml, handle, args.vram_fill)
         info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-        want = info.total * args.vram_fill / 100.0
-        block = 64 * 1024 * 1024
-        while pynvml.nvmlDeviceGetMemoryInfo(handle).used < want:
-            try:
-                blocks.append(torch.empty(block, dtype=torch.uint8, device="cuda"))
-            except RuntimeError as exc:
-                print(f"vram fill stopped early ({exc})")
-                break
-        used = pynvml.nvmlDeviceGetMemoryInfo(handle).used / 1048576.0
-        print(f"vram filled to {used:.0f} MiB before the probe started")
+        filled_mib = info.used / MIB
+        print(f"vram fill stopped at {filled_mib:.0f} MiB of {info.total / MIB:.0f}"
+              f" ({filled_mib / (info.total / MIB) * 100:.0f}%), holding"
+              f" {len(blocks) * BLOCK / MIB:.0f} MiB in {len(blocks)} blocks: {reason}")
 
-    a = torch.randn(N, N, dtype=torch.float16, device="cuda")
-    b = torch.randn(N, N, dtype=torch.float16, device="cuda")
-    c = torch.empty(N, N, dtype=torch.float16, device="cuda")
-    torch.cuda.synchronize()
+    try:
+        a = torch.randn(N, N, dtype=torch.float16, device="cuda")
+        b = torch.randn(N, N, dtype=torch.float16, device="cuda")
+        c = torch.empty(N, N, dtype=torch.float16, device="cuda")
+        torch.cuda.synchronize()
+    except Exception as exc:
+        print(f"could not allocate the work tensors: {str(exc).splitlines()[0][:120]}")
+        return 3
 
     samples = []
     stop = threading.Event()
@@ -107,15 +157,20 @@ def main() -> int:
         while not stop.is_set():
             if handle is not None:
                 samples.append(sample_nvml(handle, pynvml))
-            stop.wait(0.5)
+            stop.wait(SAMPLE_SECONDS)
 
     poller = threading.Thread(target=poll, daemon=True)
     poller.start()
 
     # warm up: the first matmul pays cuBLAS handle and workspace setup
-    for _ in range(5):
-        torch.matmul(a, b, out=c)
-    torch.cuda.synchronize()
+    try:
+        for _ in range(5):
+            torch.matmul(a, b, out=c)
+        torch.cuda.synchronize()
+    except Exception as exc:
+        stop.set()
+        print(f"warm-up matmul failed: {str(exc).splitlines()[0][:120]}")
+        return 3
     samples.clear()
 
     print(f"running {N}x{N} fp16 matmul flat out for {args.seconds:.0f}s ...")
@@ -151,8 +206,12 @@ def main() -> int:
         print(f"rate first/last {first:.1f}/s -> {last:.1f}/s "
               f"({'steady' if last > first * 0.7 else 'DECAYING'})")
     print()
+    utils = [s["util_gpu"] for s in samples if s["util_gpu"] is not None]
     if samples:
-        print(f"nvml util.gpu   {summarise(samples, 'util_gpu')}")
+        print(f"nvml util.gpu   {summarise(samples, 'util_gpu')}"
+              f"  ({len(utils)} samples every {SAMPLE_SECONDS:.1f}s)")
+        if len(utils) > 1:
+            print(f"     sd {statistics.pstdev(utils):.1f}   buckets {histogram(utils)}")
         print(f"nvml util.mem   {summarise(samples, 'util_mem')}")
         print(f"nvml clocks.sm  {summarise(samples, 'clock_sm')} MHz")
         print(f"nvml power      {summarise(samples, 'power_w')} W")
@@ -160,22 +219,32 @@ def main() -> int:
         print(f"nvml mem.used   {summarise(samples, 'mem_used_mb')} MiB")
 
     print()
-    utils = [s["util_gpu"] for s in samples if s["util_gpu"] is not None]
     busy = tflops > 1.0
+    where = f" with the frame buffer at {filled_mib:.0f} MiB" if filled_mib else ""
     if not utils:
         print("VERDICT: NVML reports no utilisation figure on this host at all.")
         print("         The gpu Dial cannot close its loop here. Drive it open-loop")
         print("         and say so in README.md and GUIDE.md.")
-    elif busy and statistics.mean(utils) < 10.0:
-        print("VERDICT: the GPU is doing real work and NVML utilisation is wrong.")
-        print("         The defect is in the instrument, not the load thread.")
-        print("         loadgen.py must stop closing its loop on this reading.")
-    elif busy:
-        print("VERDICT: throughput and NVML agree. The instrument is sound here;")
-        print("         reproduce the collapse with --vram-fill 95 before concluding.")
+    elif not busy:
+        print(f"VERDICT: throughput is near zero{where}. The load itself is failing,")
+        print("         not the measurement. Look at GpuLoad._run, not at NVML.")
     else:
-        print("VERDICT: throughput is near zero. The load itself is failing, not the")
-        print("         measurement. Look at GpuLoad._run, not at NVML.")
+        mean = statistics.mean(utils)
+        sd = statistics.pstdev(utils) if len(utils) > 1 else 0.0
+        if mean < 10.0:
+            print(f"VERDICT: the GPU is doing real work{where} and NVML reads idle.")
+            print("         The defect is in the instrument, not the load thread.")
+            print("         loadgen.py must stop closing its loop on this reading.")
+        elif mean < 80.0 or sd > 20.0:
+            print(f"VERDICT: the GPU was busy for the whole run{where}, yet NVML")
+            print(f"         utilisation read {mean:.0f} +/- {sd:.0f}. A counter that")
+            print("         tracked this guest's work would sit near 100 with little")
+            print("         spread. This one does not follow the load; the gpu Dial")
+            print("         cannot close its loop on it.")
+        else:
+            print(f"VERDICT: throughput and NVML agree{where}. The instrument is")
+            print("         sound here; reproduce the collapse with --vram-fill 95")
+            print("         before concluding.")
 
     del blocks
     return 0

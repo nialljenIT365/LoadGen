@@ -330,6 +330,10 @@ class Nvml:
         except Exception:
             return None
 
+    def used_bytes(self):
+        memory = self.memory()
+        return None if memory is None else memory[0]
+
     def shutdown(self) -> None:
         if self.ok:
             try:
@@ -609,13 +613,22 @@ class GpuLoad:
 
 
 class VramLoad:
-    """A list of 64 MB device blocks, resized directly each tick."""
+    """A list of 64 MB device blocks, resized directly each tick.
+
+    On a WDDM guest cudaMalloc does not fail when the frame buffer is full: the
+    driver backs further blocks with shared system memory and NVML memory.used
+    stops rising. Left unchecked, the Self-check would then grow this list
+    every tick into host RAM. So each new block is checked against NVML: one
+    that did not raise memory.used by at least half its size landed in system
+    RAM. It is freed, the Dial holds at that size, and one warning is printed.
+    """
 
     def __init__(self) -> None:
         self.blocks: list = []
         self.ready = False
         self.error = ""
         self._torch = None
+        self._ceiling = None  # block count at which the frame buffer was full
 
     def start(self) -> bool:
         try:
@@ -634,26 +647,57 @@ class VramLoad:
     def own_bytes(self) -> int:
         return len(self.blocks) * VRAM_BLOCK_BYTES
 
-    def resize(self, wanted_bytes: int) -> None:
+    def resize(self, wanted_bytes: int, used_bytes) -> None:
+        """Grow or shrink to `wanted_bytes`.
+
+        `used_bytes` returns NVML memory.used, or None when it cannot be read;
+        without it the spill check is skipped.
+        """
         torch = self._torch
         wanted_blocks = max(0, round(wanted_bytes / VRAM_BLOCK_BYTES))
+        if self._ceiling is not None and wanted_blocks < self._ceiling:
+            self._ceiling = None  # Target lowered; the next rise probes again
+        if self._ceiling is not None:
+            wanted_blocks = min(wanted_blocks, self._ceiling)
         while len(self.blocks) > wanted_blocks:
             self.blocks.pop()
         if len(self.blocks) < wanted_blocks:
             try:
                 while len(self.blocks) < wanted_blocks:
+                    before = used_bytes()
                     self.blocks.append(
                         torch.empty(
                             VRAM_BLOCK_BYTES, dtype=torch.uint8, device="cuda"
                         )
                     )
+                    if before is not None and not self._landed(used_bytes, before):
+                        self.blocks.pop()
+                        torch.cuda.empty_cache()
+                        self._ceiling = len(self.blocks)
+                        warn(
+                            f"vram allocation stopped at {self.own_bytes / 2**20:.0f} MB:"
+                            " the frame buffer is full and the next block landed in"
+                            " system RAM; holding here"
+                        )
+                        break
             except Exception as exc:
+                self._ceiling = len(self.blocks)
                 warn(f"vram allocation stopped at {self.own_bytes / 2**20:.0f} MB ({exc})")
         else:
             try:
                 torch.cuda.empty_cache()
             except Exception:
                 pass
+
+    @staticmethod
+    def _landed(used_bytes, before: float) -> bool:
+        """True once NVML shows the block in the frame buffer; False after 1 s."""
+        for _ in range(10):
+            after = used_bytes()
+            if after is None or after - before >= VRAM_BLOCK_BYTES // 2:
+                return True
+            time.sleep(0.1)
+        return False
 
     def release(self) -> None:
         self.blocks = []
@@ -938,7 +982,7 @@ def main(argv=None) -> int:
                     warnings.check(
                         "vram", targets["vram"], baseline / memory[1] * 100.0
                     )
-                vram_load.resize(int(wanted))
+                vram_load.resize(int(wanted), nvml.used_bytes)
 
             if targets["ram"] > 0.0 or ram_load.own_bytes:
                 ram_baseline = ram_in_use - ram_load.own_bytes
