@@ -1,6 +1,6 @@
 # NV SKU GPU Testing
 
-A synthetic load generator for an Azure Virtual Desktop session host (NV12ads_A10_v5) that holds GPU, CPU and RAM utilization at chosen percentages so autoscale rules and monitoring can be tested without real users.
+A synthetic load generator for an Azure Virtual Desktop session host (NV12ads_A10_v5) that holds GPU, VRAM, CPU and RAM utilization at chosen percentages so user density on the GPU SKU can be tested without real users.
 
 ## Language
 
