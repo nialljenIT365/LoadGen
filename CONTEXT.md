@@ -32,6 +32,14 @@ _Avoid_: feedback loop, monitor, controller
 The percentage a Consumer currently reports for that resource, read back by the self-check.
 _Avoid_: measured, observed, reading
 
+**User Profile**:
+The expected cost of one typical user, expressed as one value per resource. Multiplied by a user count to derive Targets.
+_Avoid_: per-user cost, user footprint, persona
+
+**Users**:
+The number of simulated users whose combined User Profile sets the Targets. A dial given an explicit Target ignores Users.
+_Avoid_: sessions, seats, density
+
 **Consumer**:
 A monitoring tool whose displayed figure must track the target. In scope: Task Manager, Windows performance counters (Perfmon, Resource Monitor), nvidia-smi.
 _Avoid_: monitor, watcher, reader
