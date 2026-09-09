@@ -40,6 +40,12 @@ _Avoid_: per-user cost, user footprint, persona
 The number of simulated users whose combined User Profile sets the Targets. A dial given an explicit Target ignores Users.
 _Avoid_: sessions, seats, density
 
-**Consumer**:
+**Reference Session**:
+One real person logged into the host doing representative work, following an app checklist, while the Profiler samples. Its measured cost becomes the User Profile.
+_Avoid_: typical user, test user, pilot session
+
+**Profiler**:
+The tool run inside a Reference Session, by that user, that samples the session's own resource cost and writes a User Profile.
+_Avoid_: recorder, capture script, pre-run
 A monitoring tool whose displayed figure must track the target. In scope: Task Manager, Windows performance counters (Perfmon, Resource Monitor), nvidia-smi.
 _Avoid_: monitor, watcher, reader
