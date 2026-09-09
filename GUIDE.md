@@ -7,12 +7,12 @@ Virtual Desktop (AVD) session host for the first time.
 many users the machine would hold, without needing real users. You tell it "make
 the GPU read 60%" and it holds the machine there until you stop it.
 
-**Quick start.** Once set up, this holds GPU, CPU and RAM at 70% for five
+**Quick start.** Once set up, this holds GPU, VRAM, CPU and RAM at 70% for five
 minutes and logs every tick. The log name carries the launch date, time and
 flags so the CSV traces back to the run.
 
 ```
-python loadgen.py --gpu 70 --cpu 70 --ram 70 --duration 5m --log analysisun-2026-09-09-1615-gpu70-cpu70-ram70.csv
+python loadgen.py --gpu 70 --vram 70 --cpu 70 --ram 70 --duration 5m --log analysis\run-2026-09-09-1615-gpu70-vram70-cpu70-ram70.csv
 ```
 
 **What you need before you start:**
