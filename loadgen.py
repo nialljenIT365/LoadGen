@@ -524,6 +524,7 @@ class GpuLoad:
         self._torch = None
         self._a = self._b = self._c = None
         self._seeded = False
+        self._device = 0
 
     def start(self) -> bool:
         try:
@@ -534,6 +535,7 @@ class GpuLoad:
         if not torch.cuda.is_available():
             self.error = "torch is installed but reports no CUDA device"
             return False
+        self._device = torch.cuda.current_device()
         try:
             n = GPU_MATMUL_N
             self._a = torch.randn(n, n, dtype=torch.float16, device="cuda")
@@ -553,6 +555,12 @@ class GpuLoad:
     def _run(self) -> None:
         torch = self._torch
         clock = time.perf_counter
+        try:  # the worker thread must own its context, not attach one lazily
+            torch.cuda.set_device(self._device)
+        except Exception as exc:
+            warn(f"gpu work failed (cuda context: {exc}); gpu dial disabled")
+            self.ready = False
+            return
         while not self._stop.is_set():
             duty = self.duty
             if duty <= 0.0:
