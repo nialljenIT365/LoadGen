@@ -41,6 +41,8 @@ in [CONTEXT.md](CONTEXT.md).
 | **Consumer** | A monitoring tool whose number has to match: Task Manager, Perfmon, `nvidia-smi`. |
 | **Users** | A count of simulated users. Sets the Targets when you do not set them yourself. |
 | **User Profile** | What one typical user costs, as one number per resource. Multiplied by Users to get Targets. |
+| **Reference Session** | One real person logged in doing representative work, following `CHECKLIST.md`, while the Profiler measures. |
+| **Profiler** | `profiler.py`. Run inside a Reference Session, by that person, to measure what the session costs and write a User Profile. |
 
 **How a Target works.** A Target is the **overall** figure a Consumer
 shows — not LoadGen's own share of it. Ask for `cpu 60` on a machine already
@@ -658,25 +660,141 @@ are there so `--users 15` produces *something* on the first run.
 If the real per-user cost is half the guess, LoadGen will report the host holding
 half as many users as it truly can — and someone will size a deployment on it.
 
-### Measure the real numbers
+### Measure the real numbers with the Profiler
 
-1. Have one real person log into the session host and do genuinely
-   representative work for 15–30 minutes — the actual apps, the actual
-   documents, not an idle desktop.
-2. While they work, watch what that one session costs:
-   - **cpu** — Task Manager → Details, or Performance for the whole-machine
-     figure. Record a typical sustained percentage, not the peak.
-   - **ram_gb** — Task Manager → Users, expand the session, read its memory in
-     GB.
-   - **gpu** and **vram_mb** — run
-     `nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv -l 5`
-     with only that one user on the host, and subtract the idle Baseline you
-     recorded before they logged in.
-3. Replace all four numbers in the `per_user` block of `targets.json`.
-4. Re-run `--users N`. Every Target now derives from measurement rather than
-   assumption.
+`profiler.py` does the measuring for you. One real person — a **Reference
+Session** — logs into the host, starts the Profiler, works through
+`CHECKLIST.md` for about 20 minutes, and stops it. The Profiler writes a User
+Profile file. LoadGen loads that file with `--profile`.
 
-Repeat this whenever the app set on the host changes.
+The Profiler measures **its own Windows session**: every process belonging to
+the person running it. It does not need administrator rights, and it does not
+need you to capture a Baseline first. The reasoning is in
+[docs/adr/0002-profiler-measures-own-session.md](docs/adr/0002-profiler-measures-own-session.md).
+
+#### 8a. Before you start
+
+- The person doing the work runs the Profiler themselves, logged in as
+  themselves. A normal account is fine; do not use an admin account just for
+  this.
+- **Nothing else on the host.** No other users logged in, and LoadGen not
+  running. If LoadGen is running the Profiler will warn you — stop LoadGen and
+  start again, because otherwise you will measure LoadGen's synthetic load and
+  call it a user.
+- Open [CHECKLIST.md](CHECKLIST.md) and read it. **Replace the generic office
+  steps with your real app set** before a run you intend to act on. A profile
+  of five browser tabs is worthless if your users spend the day in Revit.
+- Do not open the apps yet. Launching them is part of what a user costs, and
+  the Profiler should be running when it happens.
+
+#### 8b. Start it
+
+From the same folder, with the venv activated:
+
+```
+python profiler.py --duration 20m
+```
+
+You will see:
+
+```
+session 3 as jdoe on AVD-NV12-01
+checklist: office-generic v1
+tick 2s, warm-up 60s discarded, 1200s
+output folder: C:\Users\jdoe\Documents\LoadGen
+
+10:15:02  procs  23 | cpu 5.8 | ram 2.4 GB | gpu 3.9 | vram 310 MB  (warm-up)
+```
+
+One line every 2 seconds. `procs` is how many processes in this session are
+being counted; it climbs as apps open. The first 60 seconds are marked
+`(warm-up)` and thrown away, so signing in and settling down does not skew the
+result.
+
+Leave the window open but out of the way. Do not minimise it to a different
+desktop and forget about it.
+
+#### 8c. Do the work
+
+Follow `CHECKLIST.md` from the top. Work at a normal pace. The point is a
+realistic 20 minutes, not a stress test — if you race through it you will
+measure a person who does not exist.
+
+Finish with the idle step. Do not close the apps first: a session sitting
+still with fifteen windows open still costs memory, and that is most of a
+working day.
+
+#### 8d. Stop it
+
+Press **Ctrl+C**, or let `--duration` end the run. Either way it writes the
+files. You get a summary:
+
+```
+601 ticks, 571 retained after warm-up, 4 processes skipped
+
+metric          mean       p95      peak
+gpu              3.9       9.1      22.0
+cpu              5.8      14.2      31.0
+vram_mb        280.0     310.0     340.0
+ram_gb           2.3       2.6       2.8
+
+User Profile: gpu 3.9  cpu 5.8  vram_mb 310  ram_gb 2.6
+
+wrote C:\Users\jdoe\Documents\LoadGen\profile-jdoe-2026-09-09-1015.json
+wrote C:\Users\jdoe\Documents\LoadGen\profile-jdoe-2026-09-09-1015.csv
+```
+
+`gpu` and `cpu` take the **mean** — a user is not at their peak all day.
+`vram_mb` and `ram_gb` take the **p95** — memory that is allocated stays
+allocated, so sizing on the average would under-provision the host.
+
+The `.csv` has one row per tick if you want to see the shape of the run rather
+than the four summary numbers.
+
+#### 8e. Use it
+
+Copy the `.json` to the machine you run LoadGen from, then:
+
+```
+python loadgen.py --profile "C:\Users\jdoe\Documents\LoadGen\profile-jdoe-2026-09-09-1015.json" --users 15
+```
+
+The profile's `per_user` block goes into `targets.json` in place of the shipped
+guesses, and every Target derives from it. Check the file to confirm:
+
+```
+type targets.json
+```
+
+#### Check — do not continue until all of these are true
+
+- The summary printed four rows and none of the numbers is zero.
+- `samples_retained` in the `.json` is comfortably over 30, and `too_short` is
+  `false`.
+- `gpu_available` is `true`. If it is `false`, the GPU was not readable and
+  `gpu` and `vram_mb` are `null` — see below.
+- `targets.json` now shows your measured numbers in `per_user`.
+
+#### If something looks wrong
+
+- **`gpu` and `vram` show `--` and `gpu_available` is `false`.** NVML could not
+  open the GPU. `meta.gpu_unavailable_reason` in the `.json` says why — usually
+  a missing `nvidia-ml-py` or a driver problem. Fix Step 1 and Step 5, then
+  re-run. LoadGen will accept the profile anyway and fall back to its shipped
+  guesses for those two Dials, with a warning; that is a fallback, not a result.
+- **`too_short` is `true`.** Fewer than 30 samples were kept. Run for longer.
+- **`skipped_processes` is more than a handful.** Those are processes the
+  Profiler could not read, so their cost is missing from the profile. A few
+  SYSTEM-owned ones are expected and normal. Dozens are not.
+- **`meta.method.gpu` says `engine`.** The vGPU driver would not attribute GPU
+  work per process, so the figure came from the Windows GPU Engine counter
+  instead. Usable, but note it when you report the result — check
+  `meta.nvml_to_engine_ratio`, which records how far the two whole-host figures
+  disagreed.
+
+Repeat the whole of Step 8 whenever the app set on the host changes. Bump the
+`version:` line in `CHECKLIST.md` when you change the checklist, so a profile
+can always be traced back to the workload it came from.
 
 ---
 
@@ -750,7 +868,7 @@ Only once all three look normal is the host clean for the next test.
 ```
 python loadgen.py [--gpu N] [--vram N] [--cpu N] [--ram N]
                   [--users N] [--duration 90s|30m|2h] [--log PATH]
-                  [--nice] [--unsafe] [--targets PATH]
+                  [--nice] [--unsafe] [--targets PATH] [--profile PATH]
 ```
 
 | Flag | What it does |
@@ -765,6 +883,20 @@ python loadgen.py [--gpu N] [--vram N] [--cpu N] [--ram N]
 | `--nice` | Run CPU workers at below-normal priority |
 | `--unsafe` | Allow ram and vram Targets above 95 |
 | `--targets PATH` | Use a different targets file. Default: `targets.json` beside the script |
+| `--profile PATH` | Use the User Profile written by `profiler.py` instead of the shipped guesses (Step 8) |
+
+```
+python profiler.py [--duration 20m] [--warmup 60] [--checklist NAME]
+                   [--out DIR] [--tick 2]
+```
+
+| Flag | What it does |
+|---|---|
+| `--duration` | Run time, e.g. `20m`. Default: until Ctrl+C |
+| `--warmup N` | Seconds of samples to discard at the start. Default: 60, `0` allowed |
+| `--checklist NAME` | Checklist name recorded in the output. Default: read from `CHECKLIST.md` |
+| `--out DIR` | Output folder. Default: `%USERPROFILE%\Documents\LoadGen` |
+| `--tick N` | Seconds between samples. Default: 2 |
 
 `--log run1.csv` writes one row every 2 seconds:
 `timestamp, users, gpu_t, gpu_a, gpu_tm, vram_t, vram_a, cpu_t, cpu_a, ram_t, ram_a`.
@@ -779,11 +911,15 @@ Applies when you report results.
 **Verified** on a development machine with no NVIDIA GPU: CPU Dial convergence,
 RAM fill and release, the below-Baseline warning, invalid-JSON handling, live
 retargeting through `targets.json`, `--duration`, and Ctrl+C exiting cleanly
-with no orphan processes.
+with no orphan processes. For the Profiler: session process counting, the cpu
+and ram figures, warm-up and `too_short`, Ctrl+C writing both files, output
+folder creation, and `--profile` feeding `targets.json`.
 
 **Not verified — you are the first to run these:** the `gpu` Dial moving
 `nvidia-smi` and Task Manager, the `vram` Dial reaching a given `memory.used`,
-and `--users N` populating all four Dials on a real GPU host.
+and `--users N` populating all four Dials on a real GPU host. For the Profiler:
+every GPU and VRAM path — which method gets chosen, whether `vram_mb` is
+plausible for a desktop session, and the NVML-to-GPU-Engine ratio.
 
 If a GPU result looks wrong, it may well be. Cross-check against `nvidia-smi`
 before you believe a number, and report what you find.
@@ -795,5 +931,9 @@ before you believe a number, and report what you find.
 - [README.md](README.md) — full reference, the assumptions made during the
   build, and what is out of scope.
 - [CONTEXT.md](CONTEXT.md) — the complete vocabulary.
+- [CHECKLIST.md](CHECKLIST.md) — the work a Reference Session does while the
+  Profiler measures. Replace it with your own app set.
 - [docs/adr/0001-target-is-consumer-figure.md](docs/adr/0001-target-is-consumer-figure.md)
   — why a Target is the Consumer's overall figure.
+- [docs/adr/0002-profiler-measures-own-session.md](docs/adr/0002-profiler-measures-own-session.md)
+  — why the Profiler sums its own session instead of subtracting a Baseline.

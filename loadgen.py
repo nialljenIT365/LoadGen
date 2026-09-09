@@ -177,6 +177,52 @@ class TargetsFile:
         return doc
 
 
+def load_profile(path: str) -> dict:
+    """Read a User Profile written by profiler.py and return its per_user block.
+
+    Only the `per_user` block is used; the profile's stats and meta are for the
+    operator to read. A null value means the Profiler could not measure that
+    resource -- the built-in default stands in for it.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            doc = json.load(handle)
+    except OSError as exc:
+        raise ValueError(f"cannot read profile {path} ({exc})") from None
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"profile {path} is not valid JSON ({exc})") from None
+    if not isinstance(doc, dict):
+        raise ValueError(f"profile {path}: top level is not an object")
+
+    supplied = doc.get("per_user")
+    if not isinstance(supplied, dict):
+        raise ValueError(
+            f"profile {path} has no per_user block; it was not written by "
+            "profiler.py"
+        )
+
+    per_user = dict(DEFAULT_PER_USER)
+    measured = []
+    for key in DEFAULT_PER_USER:
+        value = supplied.get(key)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"profile {path}: per_user.{key} is not a number")
+        per_user[key] = float(value)
+        measured.append(key)
+    if not measured:
+        raise ValueError(
+            f"profile {path}: per_user has no measured values for "
+            f"{', '.join(DEFAULT_PER_USER)}"
+        )
+    missing = [key for key in DEFAULT_PER_USER if key not in measured]
+    if missing:
+        warn(f"profile has no value for {', '.join(missing)}; "
+             "using the built-in default for each")
+    return per_user
+
+
 def _number(value, field: str):
     """None passes through; anything non-numeric is rejected with a warning."""
     if value is None:
@@ -732,7 +778,19 @@ def main(argv=None) -> int:
                         help="allow ram and vram targets above 95")
     parser.add_argument("--targets", metavar="PATH",
                         help="targets file path; default targets.json beside this script")
+    parser.add_argument("--profile", metavar="PATH",
+                        help="User Profile written by profiler.py; its per_user "
+                             "block replaces the built-in defaults")
     args = parser.parse_args(argv)
+
+    per_user = dict(DEFAULT_PER_USER)
+    if args.profile:
+        try:
+            per_user = load_profile(args.profile)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"user profile: {args.profile}", flush=True)
 
     try:
         import psutil
@@ -781,7 +839,7 @@ def main(argv=None) -> int:
     )
     targets_file = TargetsFile(targets_path)
     try:
-        targets_file.write(args.users, cli_dials, dict(DEFAULT_PER_USER))
+        targets_file.write(args.users, cli_dials, per_user)
     except OSError as exc:
         print(f"error: cannot write {targets_path} ({exc})", file=sys.stderr)
         return 2
