@@ -61,7 +61,9 @@ Two files, same stem: `profile-<username>-<YYYY-MM-DD-HHMM>.json` and `.csv`.
 
 CSV: one row per retained tick, columns `timestamp, procs, cpu, ram_gb, gpu, vram_mb, host_gpu_nvml, host_gpu_engine`.
 
-JSON:
+JSON. The `host`, `user`, timestamp and every figure below are **invented
+examples** used to show the shape of the file — they are not from a real host,
+account or run:
 
 ```json
 {
