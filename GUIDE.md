@@ -444,7 +444,7 @@ python loadgen.py --cpu 30 --duration 60s
 ### What you will see
 
 Real output from a 12-vCPU machine. This capture used `--duration 12s` to keep
-it short; a 60-second run looks identical with more ticks:
+it short; a 60-second run looks identical with more lines:
 
 ```
 targets file: C:\Tools\LoadGen\targets.json (re-read every 2s)
@@ -475,8 +475,8 @@ released: cpu workers stopped, ram and vram blocks dropped
    +------------------------------------------------------- wall-clock time
 ```
 
-Every Dial prints as **`target/actual`**. One line every 2 seconds — that is one
-Self-check tick.
+Every Dial prints as **`target/actual`**. One line every 2 seconds — each line
+is one Self-check.
 
 - **`--`** means the value could not be read. On a CPU-only run with no GPU
   activity that is expected for `gpu` and `vram`.
@@ -492,7 +492,7 @@ Self-check tick.
 
 ### Check
 
-- [ ] The Actual for `cpu` lands near the Target within three or four ticks
+- [ ] The Actual for `cpu` lands near the Target within about 8 seconds
       (30/30, 30/32 — small wobble is normal).
 - [ ] Task Manager's CPU figure agrees, roughly.
 - [ ] After 60 seconds it prints `duration reached` and then `released:`.
@@ -500,7 +500,7 @@ Self-check tick.
 ### Expected: the below-Baseline warning
 
 Ask for a Target lower than what the machine is already using and you will see
-this once, before the first tick:
+this once, before the first output line:
 
 ```
 warning: ram target 20 is below the current Baseline (61); contributing nothing
@@ -592,7 +592,7 @@ The rules for that file:
 Leave the run going. Open `targets.json` in Notepad — **a second window, while
 the run continues** — change `"users": 15` to `"users": 20`, and save.
 
-Within two ticks (four seconds) the console shows the new Targets, and LoadGen
+Within about 4 seconds the console shows the new Targets, and LoadGen
 starts working towards them. Here is that happening on a live run — the `cpu`
 Target was changed from 0 to 35 mid-run:
 
@@ -607,8 +607,8 @@ Target was changed from 0 to 35 mid-run:
 10:59:00  gpu   0/ -- (tm   8) | vram   0/ -- | cpu  35/ 35 | ram   0/ 60
 ```
 
-The Target changes on the very next tick; the Actual takes three or four ticks
-to catch up.
+The Target changes on the next output line, within 2 seconds; the Actual takes
+about 8 seconds to catch up.
 
 You can also pin one Dial and derive the rest — set `"cpu": 90` and leave the
 others `null`, and cpu holds at 90 while gpu, vram and ram follow the user
@@ -740,7 +740,7 @@ Only once all three look normal is the host clean for the next test.
 | `warning: gpu/vram target set mid-run but ...; holding at 0` | A GPU Dial was raised in `targets.json` on a run with no GPU stack. | Deliberate — a long CPU/RAM test will not die over a typo. Restart with the GPU stack installed if you need that Dial. |
 | `gpu` Actual stays `--` or 0 during a GPU run | NVML cannot read utilisation, or the GPU load never started. | Cross-check with `nvidia-smi -l 2` in a second window. This path is unverified on real hardware — capture both outputs and report. |
 | `tm` differs from the `gpu` Actual by 10–20 points | Two different measurement layers. | Expected. LoadGen steers by the NVML figure. |
-| First `cpu` reading is 100 | The measurement window covers LoadGen starting its workers. | Expected. Read from the second tick onward. |
+| First `cpu` reading is 100 | The measurement window covers LoadGen starting its workers. | Expected. Read from the second line onward. |
 | `python.exe` processes remain after exit | Workers were not reaped. | End them in Task Manager → Details, and report it — the clean-exit path is supposed to prevent this. |
 
 ---
@@ -761,12 +761,12 @@ python loadgen.py [--gpu N] [--vram N] [--cpu N] [--ram N]
 | `--ram N` | ram Target, 0–100 (capped at 95) |
 | `--users N` | Simulated users; derives every Dial not given explicitly |
 | `--duration` | Run time, e.g. `90s`, `30m`, `2h`. Default: until Ctrl+C |
-| `--log PATH` | Append one CSV row per tick. Off by default |
+| `--log PATH` | Append one CSV row every 2 seconds. Off by default |
 | `--nice` | Run CPU workers at below-normal priority |
 | `--unsafe` | Allow ram and vram Targets above 95 |
 | `--targets PATH` | Use a different targets file. Default: `targets.json` beside the script |
 
-`--log run1.csv` writes one row per tick:
+`--log run1.csv` writes one row every 2 seconds:
 `timestamp, users, gpu_t, gpu_a, gpu_tm, vram_t, vram_a, cpu_t, cpu_a, ram_t, ram_a`.
 Use it whenever a run is producing numbers someone will act on.
 
