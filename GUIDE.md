@@ -157,8 +157,9 @@ The A10 should appear with `Status: OK`.
 ## Step 2 — Get a local copy of the repo onto the host
 
 Everything from here runs from the repository folder on the session host.
-Two ways to get it there: **git clone** (2a — preferred, because updating later
-is one command) or a **ZIP download** (2b — if git cannot be installed).
+Two ways to get it there: **git clone** (2a — use this where git can be
+installed, because updating later is one command) or a **ZIP download**
+(2b — where it cannot).
 
 ### Where to put it
 
@@ -175,7 +176,7 @@ Step 4 break or vanish between sessions. `C:\Tools` is a plain local path and
 avoids all of that. Any local folder will do — the rest of this guide writes it
 as `C:\Tools\LoadGen`.
 
-### 2a. Clone with git (preferred)
+### 2a. Clone with git
 
 Install git first. It is not on a fresh session host:
 
@@ -748,8 +749,8 @@ wrote C:\Users\jdoe\Documents\LoadGen\profile-jdoe-2026-09-09-1015.csv
 `vram_mb` and `ram_gb` take the **p95** — memory that is allocated stays
 allocated, so sizing on the average would under-provision the host.
 
-The `.csv` has one row per tick if you want to see the shape of the run rather
-than the four summary numbers.
+The `.csv` has one row every 2 seconds if you want to see the shape of the run
+rather than the four summary numbers.
 
 #### 8e. Use it
 
