@@ -39,6 +39,11 @@ CPU_PERIOD = 0.10          # seconds; one busy/sleep cycle per CPU worker
 GPU_PERIOD = 0.20          # seconds; one busy/sleep cycle on the GPU thread
 GAIN = 0.5                 # proportional correction constant for GPU and CPU
 
+# The GPU Engine counter thread needs about a second to publish its first
+# sample, so the first tick has no gpu Actual on every run. Ticks beyond this
+# many without a reading are a real instrument fault worth warning about.
+GPU_BLIND_GRACE_TICKS = 1
+
 RAM_BLOCK_BYTES = 256 * 1024 * 1024
 VRAM_BLOCK_BYTES = 64 * 1024 * 1024
 PAGE_BYTES = 4096
@@ -916,7 +921,7 @@ def main(argv=None) -> int:
         log_writer = csv.writer(log_handle)
         if new_file:
             log_writer.writerow([
-                "timestamp", "users", "gpu_t", "gpu_a", "gpu_nvml",
+                "timestamp", "users", "gpu_t", "gpu_a", "gpu_nvml", "gpu_duty",
                 "vram_t", "vram_a", "cpu_t", "cpu_a", "ram_t", "ram_a",
             ])
 
@@ -931,6 +936,7 @@ def main(argv=None) -> int:
     warnings = ClampWarnings()
     gpu_missing_warned = False
     gpu_blind_warned = False
+    gpu_blind_ticks = 0
     deadline = time.monotonic() + args.duration if args.duration else None
     started_at = time.monotonic()
 
@@ -965,11 +971,21 @@ def main(argv=None) -> int:
                     gpu_missing_warned = True
 
             # --- no gpu Actual: the Dial runs open-loop at Target/100, say so once ---
+            # The counter thread publishes its first sample about a second after
+            # it starts, so tick 1 legitimately has no reading. Warning on that
+            # would fire on every single run and mean nothing. Only a counter
+            # that is still unreadable after GPU_BLIND_GRACE_TICKS is a fault.
             if targets["gpu"] > 0.0 and gpu_load.ready and gpu_actual is None:
-                if not gpu_blind_warned and engine_counter.value is None:
+                gpu_blind_ticks += 1
+                if (
+                    not gpu_blind_warned
+                    and gpu_blind_ticks > GPU_BLIND_GRACE_TICKS
+                ):
                     warn("gpu Actual unavailable (GPU Engine counter not readable);"
                          " holding duty at Target/100 without correction")
                     gpu_blind_warned = True
+            else:
+                gpu_blind_ticks = 0
 
             # --- correct ---
             # A Dial at 0 is left alone: no correction, no allocation and no
@@ -1033,6 +1049,7 @@ def main(argv=None) -> int:
                     f"{targets['gpu']:.1f}",
                     "" if gpu_actual is None else f"{gpu_actual:.1f}",
                     "" if nvml_actual is None else f"{nvml_actual:.1f}",
+                    f"{gpu_load.duty:.3f}",
                     f"{targets['vram']:.1f}",
                     "" if vram_actual is None else f"{vram_actual:.1f}",
                     f"{targets['cpu']:.1f}",

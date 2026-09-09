@@ -2,8 +2,13 @@
 
 The CSV is written by `loadgen.py --log PATH`, one row per 2 s tick:
 
-    timestamp, users, gpu_t, gpu_a, gpu_nvml, vram_t, vram_a,
+    timestamp, users, gpu_t, gpu_a, gpu_nvml, gpu_duty, vram_t, vram_a,
     cpu_t, cpu_a, ram_t, ram_a
+
+`gpu_duty` is the gpu Dial's own busy fraction, 0 to 1. It is what the Dial
+controls; `gpu_a` is what the counter reads back. A duty that never moves while
+`gpu_a` sits on Target means the Dial was seeded correctly and never had to
+correct, which is not the same result as a loop that converged.
 
 An Actual is written as an empty field when the reading was unavailable and as
 a number when it was read. `0.0` and `` are different answers: the first says
