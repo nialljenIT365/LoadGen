@@ -685,6 +685,9 @@ need you to capture a Baseline first. The reasoning is in
 - Open [CHECKLIST.md](CHECKLIST.md) and read it. **Replace the generic office
   steps with your real app set** before a run you intend to act on. A profile
   of five browser tabs is worthless if your users spend the day in Revit.
+  [docs/reference-session-checklist.html](docs/reference-session-checklist.html)
+  is a worked example for a design and engineering image — open it in a browser
+  to tick items off as you go, or print it.
 - Do not open the apps yet. Launching them is part of what a user costs, and
   the Profiler should be running when it happens.
 
@@ -941,6 +944,9 @@ before you believe a number, and report what you find.
 - [CONTEXT.md](CONTEXT.md) — the complete vocabulary.
 - [CHECKLIST.md](CHECKLIST.md) — the work a Reference Session does while the
   Profiler measures. Replace it with your own app set.
+- [docs/reference-session-checklist.html](docs/reference-session-checklist.html)
+  — the same thing as a printable tick sheet, worked through for a design and
+  engineering image. Ticks can be saved back into the file.
 - [docs/adr/0001-target-is-consumer-figure.md](docs/adr/0001-target-is-consumer-figure.md)
   — why a Target is the Consumer's overall figure.
 - [docs/adr/0002-profiler-measures-own-session.md](docs/adr/0002-profiler-measures-own-session.md)

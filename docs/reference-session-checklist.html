@@ -1,0 +1,735 @@
+<title>Reference Session Checklist</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Caveat:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+  :root{
+    --paper: #EDE7D3;
+    --paper-alt: #E4DCC3;
+    --ink: #23304A;
+    --ink-soft: #4B5670;
+    --rule: #B9C3D6;
+    --red: #A6392C;
+    --red-soft: #C65C4C;
+    --highlight: #E3B54B;
+    --muted: #857F68;
+    --card-shadow: rgba(35,48,74,0.10);
+  }
+
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper: #1C2321;
+      --paper-alt: #232B28;
+      --ink: #EDEBDD;
+      --ink-soft: #B9C0B2;
+      --rule: #37423C;
+      --red: #E08A78;
+      --red-soft: #E8A897;
+      --highlight: #D9AE4E;
+      --muted: #8B9186;
+      --card-shadow: rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper: #1C2321;
+    --paper-alt: #232B28;
+    --ink: #EDEBDD;
+    --ink-soft: #B9C0B2;
+    --rule: #37423C;
+    --red: #E08A78;
+    --red-soft: #E8A897;
+    --highlight: #D9AE4E;
+    --muted: #8B9186;
+    --card-shadow: rgba(0,0,0,0.35);
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    padding: 2.5rem 1.25rem 4rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .sheet{
+    width: 100%;
+    max-width: 640px;
+  }
+
+  header{
+    margin-bottom: 2.2rem;
+  }
+
+  .eyebrow{
+    font-family: "Caveat", cursive;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--red);
+    transform: rotate(-2deg);
+    display: inline-block;
+    margin-bottom: 0.1rem;
+  }
+
+  h1{
+    font-family: "Fraunces", Georgia, serif;
+    font-optical-sizing: auto;
+    font-weight: 600;
+    font-size: clamp(2.1rem, 6vw, 2.75rem);
+    line-height: 1.05;
+    margin: 0 0 0.5rem;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+
+  .subtitle{
+    color: var(--ink-soft);
+    font-size: 0.98rem;
+    max-width: 46ch;
+    line-height: 1.5;
+  }
+
+  .subtitle b{ color: var(--ink); font-weight: 600; }
+
+  .print-btn{
+    margin-top: 1.1rem;
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--paper);
+    background: var(--ink);
+    border: none;
+    border-radius: 3px;
+    padding: 0.55rem 1rem;
+    cursor: pointer;
+  }
+  .print-btn:hover{ background: var(--red); }
+  .print-btn:focus-visible{ outline: 2px solid var(--red); outline-offset: 2px; }
+
+  /* Ticking happens all the way down a 45-item page, so the button that saves
+     the ticks follows the reader rather than sitting in the header they left
+     behind at item three. Fixed, so its place in the markup stays where it
+     reads: beside Print. */
+  .save-ticks{
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 20;
+    margin-top: 0;
+    box-shadow: 0 3px 12px var(--card-shadow);
+  }
+
+
+  section.group{
+    margin-bottom: 1.7rem;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    background:
+      repeating-linear-gradient(
+        var(--paper-alt) 0px,
+        var(--paper-alt) 2.05rem,
+        var(--rule) 2.05rem,
+        var(--rule) calc(2.05rem + 1px)
+      );
+    background-position: 0 3.4rem;
+    box-shadow: 0 2px 10px var(--card-shadow);
+    overflow: hidden;
+  }
+
+  .group-head{
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.9rem 1.1rem 0.7rem;
+    background: var(--paper-alt);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .group-head h2{
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 600;
+    font-size: 1.18rem;
+    margin: 0;
+  }
+
+  .group-head .when{
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  ul.items{
+    list-style: none;
+    margin: 0;
+    padding: 0.3rem 0 0.4rem;
+  }
+
+  li.item{
+    display: grid;
+    grid-template-columns: 1.6rem 1fr auto;
+    align-items: start;
+    gap: 0.7rem;
+    padding: 0.5rem 1.1rem;
+    min-height: 2.05rem;
+  }
+
+  input[type="checkbox"]{
+    appearance: none;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-top: 0.15rem;
+    border: 1.6px solid var(--ink-soft);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+  }
+  input[type="checkbox"]:checked{
+    border-color: var(--red);
+    background: var(--red);
+  }
+  input[type="checkbox"]:checked::after{
+    content: "";
+    position: absolute;
+    left: 3px; top: -1px;
+    width: 5px; height: 9px;
+    border: solid var(--paper);
+    border-width: 0 2px 2px 0;
+    transform: rotate(40deg);
+  }
+  input[type="checkbox"]:focus-visible{ outline: 2px solid var(--red); outline-offset: 2px; }
+
+  .task{
+    font-size: 0.97rem;
+    line-height: 1.35;
+    padding-top: 0.05rem;
+  }
+  .task .who{
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--paper);
+    background: var(--ink-soft);
+    border-radius: 2px;
+    padding: 0.05rem 0.35rem;
+    margin-right: 0.4rem;
+    transform: translateY(-1px);
+  }
+  .source{
+    display: block;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 0.1rem;
+  }
+  .unverified{
+    display: block;
+    font-size: 0.78rem;
+    color: var(--red-soft);
+    margin-top: 0.1rem;
+  }
+  /* Same provenance note, for a scan somebody has actually read. Muted, not
+     red: it is a fact about the document, not an outstanding job. */
+  .checked{
+    display: block;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 0.1rem;
+  }
+
+  .task a{
+    color: var(--red);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .task a:hover{ color: var(--red-soft); }
+
+  .stamp{
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.74rem;
+    font-weight: 500;
+    color: var(--red);
+    border: 1.4px solid var(--red-soft);
+    border-radius: 3px;
+    padding: 0.15rem 0.4rem;
+    transform: rotate(-3deg);
+    white-space: nowrap;
+    margin-top: 0.05rem;
+  }
+
+  .note{
+    padding: 0.55rem 1.1rem 0.9rem;
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    line-height: 1.5;
+  }
+
+  table.trials{
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.2rem 1.1rem 0.9rem;
+    width: calc(100% - 2.2rem);
+    font-size: 0.82rem;
+  }
+  table.trials th, table.trials td{
+    text-align: left;
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  table.trials th{
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  footer{
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--rule);
+    font-size: 0.78rem;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 480px){
+    li.item{ grid-template-columns: 1.4rem 1fr; }
+    .stamp{ grid-column: 2; justify-self: start; margin-top: 0.3rem; }
+  }
+
+  @media print{
+    body{
+      background: #fff;
+      color: #000;
+      padding: 0;
+    }
+    .print-btn, .save-ticks{ display: none; }
+    section.group{
+      box-shadow: none;
+      border: 1px solid #999;
+      break-inside: avoid;
+      background: repeating-linear-gradient(#fff 0px, #fff 2.05rem, #ccc 2.05rem, #ccc calc(2.05rem + 1px));
+    }
+    .group-head{ background: #fff; }
+    .stamp{ color: #000; border-color: #000; }
+    .task .who{ background: #000; color: #fff; }
+    a{ color: #000; text-decoration: underline; }
+  }
+</style>
+
+<div class="sheet">
+  <header>
+    <span class="eyebrow">LoadGen · Reference Session</span>
+    <h1>Reference Session checklist</h1>
+    <p class="subtitle">Work to do while <b>profiler.py</b> is running, so the measured <b>User Profile</b> reflects a real user rather than an idle desktop. Applications are the live entries from a <b>gold image inventory</b> for a design and engineering estate — replace them with your own if your image differs.</p>
+    <button class="print-btn" onclick="window.print()">Print this list</button>
+    <button class="print-btn save-ticks" onclick="saveTicks(this)">Save ticks</button>
+  </header>
+
+  <section class="group">
+    <div class="group-head">
+      <h2>Before you start</h2>
+      <span class="when">setup</span>
+    </div>
+    <ul class="items">
+      <li class="item">
+        <input type="checkbox" id="p1i1" data-key="pre-persona">
+        <label class="task" for="p1i1"><span class="who">decide</span>Pick <b>one</b> persona for this run — Standard or GPU. Run them as separate Reference Sessions
+          <span class="source">Mixing both in one session measures a user who does not exist. The sheet splits the estate the same way: Standard Apps for all pools, GPU Apps for the GPU pool only.</span>
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="p1i2" data-key="pre-signin">
+        <label class="task" for="p1i2"><span class="who">session</span>Sign in to the session host as the account that will do the work, and close anything left over from a previous session
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="p1i3" data-key="pre-start">
+        <label class="task" for="p1i3"><span class="who">run</span>Start the Profiler from that same session: <code>python profiler.py --duration 20m</code>
+          <span class="source">It sums only the processes sharing its own Windows session ID, so it has to be started from inside the Reference Session, not from an admin window.</span>
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="p1i4" data-key="pre-warmup">
+        <label class="task" for="p1i4"><span class="who">wait</span>Let the first <b>60 seconds</b> pass before opening anything — that warm-up is discarded
+          <span class="source">Sign-in and shell startup would otherwise be counted as user cost.</span>
+        </label>
+      </li>
+    </ul>
+    <div class="note">Twenty minutes will not cover forty applications end to end. Open what this persona genuinely uses, work in each one properly, and leave it open — memory that stays allocated is what the <b>p95</b> figures are for.</div>
+  </section>
+
+  <section class="group">
+    <div class="group-head">
+      <h2>Standard apps</h2>
+      <span class="when">all pools · 13 items</span>
+    </div>
+    <ul class="items">
+      <li class="item">
+        <input type="checkbox" id="s1i1" data-key="std-7zip">
+        <label class="task" for="s1i1"><span class="who">intune</span>Open <b>7-Zip</b> and extract an archive of a few hundred MB
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="s1i2" data-key="std-acrobat">
+        <label class="task" for="s1i2"><span class="who">intune</span>Open <b>Adobe Acrobat (SDL) 26.1</b>, load a long PDF, scroll and search it
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="s1i3" data-key="std-bridge">
+        <label class="task" for="s1i3"><span class="who">intune</span>Open <b>Adobe Bridge 16.0.2 SDL</b> and browse a folder of images until thumbnails finish building
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="s1i4" data-key="std-illustrator">
+        <label class="task" for="s1i4"><span class="who">intune</span>Open <b>Adobe Illustrator 30.2.1 SDL</b>, open a real artboard and pan and zoom it
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="s1i5" data-key="std-incopy">
+        <label class="task" for="s1i5"><span class="who">intune</span>Open <b>Adobe InCopy 21.2 SDL</b> and edit a story
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="s1i6" data-key="std-indesign">
+        <label class="task" for="s1i6"><span class="who">intune</span>Open <b>Adobe InDesign 21.2 SDL</b>, open a multi-page document and page through it
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="s1i7" data-key="std-photoshop">
+        <label class="task" for="s1i7"><span class="who">intune</span>Open <b>Adobe Photoshop 27.4 SDL</b>, open a layered file and apply a filter
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="s1i8" data-key="std-fileopen">
+        <label class="task" for="s1i8"><span class="who">intune</span>Open a protected document with the <b>FileOpen Client</b>
+          <span class="unverified">Sheet status: Package Pending, deployment TBC across all pools. If it is not on the host, tick this and note it rather than waiting.</span>
+        </label>
+        <span class="stamp">PACKAGE PENDING</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="s1i9" data-key="std-firefox">
+        <label class="task" for="s1i9"><span class="who">intune</span>Open <b>Firefox</b> with a handful of tabs, including one video
+          <span class="unverified">Sheet status: Available, but deployment reads PENDING on every pool. Confirm it is actually installed before relying on the figure.</span>
+        </label>
+        <span class="stamp">DEPLOY PENDING</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="s1i10" data-key="std-chrome">
+        <label class="task" for="s1i10"><span class="who">intune</span>Open <b>Google Chrome</b> with a realistic tab count — this is usually the largest single memory cost
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="s1i11" data-key="std-mendeley">
+        <label class="task" for="s1i11"><span class="who">intune</span>Open <b>Mendeley Reference Manager</b> and let the library sync
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="s1i12" data-key="std-teams">
+        <label class="task" for="s1i12"><span class="who">image</span>Open <b>Microsoft Teams</b> and join a call with camera and screen share on
+          <span class="source">In the image rather than Intune. A Teams call is the single biggest driver of a standard user's CPU figure — do not skip it.</span>
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="s1i13" data-key="std-vlc">
+        <label class="task" for="s1i13"><span class="who">intune</span>Open <b>VLC Media Player</b> and play a video for a few minutes
+          <span class="unverified">Sheet flags the Intune detection method as misreporting (0x87D1041C). The app works; its reported deployment state does not.</span>
+        </label>
+        <span class="stamp">DETECTION ISSUE</span>
+      </li>
+    </ul>
+    <div class="note"><b>Running already, nothing to open:</b> Sophos AV and the WXP Insights Agent are both in the image and start with the host. They are part of the <b>Baseline</b>, not user cost, and need no tick.<br><br><b>Not in scope — the sheet marks these Decommissioned:</b> Adobe Creative Cloud Desktop (NUL) 6.10.0, Adobe Digital Editions, Minitab, SPSS Statistics.</div>
+  </section>
+
+  <section class="group">
+    <div class="group-head">
+      <h2>GPU apps</h2>
+      <span class="when">gpu pool · 25 items</span>
+    </div>
+    <ul class="items">
+      <li class="item">
+        <input type="checkbox" id="g1i1" data-key="gpu-aftereffects">
+        <label class="task" for="g1i1"><span class="who">intune</span>Open <b>Adobe After Effects 26.0 SDL</b>, load a composition and scrub the timeline
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i2" data-key="gpu-animate">
+        <label class="task" for="g1i2"><span class="who">intune</span>Open <b>Adobe Animate 24.0.12 SDL</b> and play back a timeline
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i3" data-key="gpu-audition">
+        <label class="task" for="g1i3"><span class="who">intune</span>Open <b>Adobe Audition 26.0 SDL</b> and play a multitrack session
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i4" data-key="gpu-characteranimator">
+        <label class="task" for="g1i4"><span class="who">intune</span>Open <b>Adobe Character Animator 26.0 SDL</b> and run a live puppet preview
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i5" data-key="gpu-dimension">
+        <label class="task" for="g1i5"><span class="who">intune</span>Open <b>Adobe Dimension 4.1.8 SDL</b> and render a scene preview
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i6" data-key="gpu-lightroom">
+        <label class="task" for="g1i6"><span class="who">intune</span>Open <b>Adobe Lightroom Classic 15.2 SDL</b> and move through the Develop module on several photos
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i7" data-key="gpu-mediaencoder">
+        <label class="task" for="g1i7"><span class="who">intune</span>Open <b>Adobe Media Encoder 26.0.2 SDL</b> and run an export to completion
+          <span class="source">An encode is sustained GPU load rather than a spike — good for the mean the User Profile uses for <code>gpu</code>.</span>
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i8" data-key="gpu-premiere">
+        <label class="task" for="g1i8"><span class="who">intune</span>Open <b>Adobe Premiere Pro SDL 25.6.3</b>, scrub a sequence and play it back
+          <span class="unverified">Sheet flags the Intune detection method as misreporting (0x87D1041C). Installed and usable; the reported state is wrong.</span>
+        </label>
+        <span class="stamp">DETECTION ISSUE</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i9" data-key="gpu-substancemodeler">
+        <label class="task" for="g1i9"><span class="who">intune</span>Open <b>Adobe Substance 3D Modeler 1.22.6 SDL</b> and sculpt in the viewport
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i10" data-key="gpu-substancepainter">
+        <label class="task" for="g1i10"><span class="who">intune</span>Open <b>Adobe Substance 3D Painter 12.0.0 SDL</b> and paint on a textured model
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i11" data-key="gpu-xd">
+        <label class="task" for="g1i11"><span class="who">intune</span>Open <b>Adobe XD 61.0.12 SDL</b> and move through a prototype
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i12" data-key="gpu-3dsmax">
+        <label class="task" for="g1i12"><span class="who">manual</span>Open <b>Autodesk 3ds Max</b>, load a scene and orbit the viewport
+          <span class="unverified">Manual install, not Intune-delivered. Confirm it is present on this host before the run.</span>
+        </label>
+        <span class="stamp">MANUAL INSTALL</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i13" data-key="gpu-autocad">
+        <label class="task" for="g1i13"><span class="who">manual</span>Open <b>Autodesk AutoCAD</b> and pan and zoom a real drawing
+          <span class="unverified">Manual install, not Intune-delivered.</span>
+        </label>
+        <span class="stamp">MANUAL INSTALL</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i14" data-key="gpu-civil3d">
+        <label class="task" for="g1i14"><span class="who">manual</span>Open <b>Autodesk Civil 3D</b> and navigate a surface model
+          <span class="unverified">Manual install, not Intune-delivered.</span>
+        </label>
+        <span class="stamp">MANUAL INSTALL</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i15" data-key="gpu-fusion">
+        <label class="task" for="g1i15"><span class="who">manual</span>Open <b>Autodesk Fusion</b> and rotate an assembly
+          <span class="unverified">Manual install, not Intune-delivered.</span>
+        </label>
+        <span class="stamp">MANUAL INSTALL</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i16" data-key="gpu-navisworks">
+        <label class="task" for="g1i16"><span class="who">manual</span>Open <b>Autodesk Navisworks</b> and walk a federated model
+          <span class="unverified">Manual install, not Intune-delivered.</span>
+        </label>
+        <span class="stamp">MANUAL INSTALL</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i17" data-key="gpu-recap">
+        <label class="task" for="g1i17"><span class="who">manual</span>Open <b>Autodesk ReCap Pro</b> and load a point cloud
+          <span class="source">Point clouds are the heaviest VRAM case in the Autodesk set — worth including if anyone on this pool uses it.</span>
+          <span class="unverified">Manual install, not Intune-delivered.</span>
+        </label>
+        <span class="stamp">MANUAL INSTALL</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i18" data-key="gpu-revit">
+        <label class="task" for="g1i18"><span class="who">manual</span>Open <b>Autodesk Revit</b>, load a model and orbit a 3D view
+          <span class="unverified">Manual install, not Intune-delivered.</span>
+        </label>
+        <span class="stamp">MANUAL INSTALL</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i19" data-key="gpu-rsa">
+        <label class="task" for="g1i19"><span class="who">manual</span>Open <b>Autodesk Robot Structural Analysis</b> and run an analysis
+          <span class="unverified">Manual install, not Intune-delivered.</span>
+        </label>
+        <span class="stamp">MANUAL INSTALL</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i20" data-key="gpu-keyshot">
+        <label class="task" for="g1i20"><span class="who">intune</span>Open <b>Keyshot Studio 2026.2</b> and run a render
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i21" data-key="gpu-rhino">
+        <label class="task" for="g1i21"><span class="who">intune</span>Open <b>Rhino 8</b> and orbit a model in a shaded viewport
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i22" data-key="gpu-sketchup">
+        <label class="task" for="g1i22"><span class="who">intune</span>Open <b>SketchUp Pro 2026</b> and navigate a model
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i23" data-key="gpu-solidworks">
+        <label class="task" for="g1i23"><span class="who">manual</span>Open <b>SOLIDWORKS</b> and rotate an assembly
+          <span class="unverified">Manual install, not Intune-delivered.</span>
+        </label>
+        <span class="stamp">MANUAL INSTALL</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i24" data-key="gpu-twinmotion">
+        <label class="task" for="g1i24"><span class="who">manual</span>Open <b>Twinmotion</b> and move through a scene in real time
+          <span class="source">Real-time rendering holds the GPU near its ceiling — expect this one to set the peak.</span>
+          <span class="unverified">Manual install, not Intune-delivered.</span>
+        </label>
+        <span class="stamp">MANUAL INSTALL</span>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="g1i25" data-key="gpu-arcgis">
+        <label class="task" for="g1i25"><span class="who">intune</span>Open <b>ArcGIS Pro 3.7.1901</b>, load a map and pan and zoom it
+        </label>
+      </li>
+    </ul>
+    <div class="note"><b>No tick needed:</b> Google Fonts is a font package, not an application to exercise.<br><br><b>Not in scope — the sheet marks these Decommissioned:</b> Arduino IDE, DesignPH, THERM.</div>
+  </section>
+
+  <section class="group">
+    <div class="group-head">
+      <h2>Finish the run</h2>
+      <span class="when">after 20 min</span>
+    </div>
+    <ul class="items">
+      <li class="item">
+        <input type="checkbox" id="f1i1" data-key="fin-stop">
+        <label class="task" for="f1i1"><span class="who">stop</span>Let <code>--duration</code> end the run, or press <b>Ctrl+C</b>. Either way the files are written
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="f1i2" data-key="fin-files">
+        <label class="task" for="f1i2"><span class="who">check</span>Confirm the <b>.json</b> and <b>.csv</b> exist at the paths the Profiler printed in its <code>wrote</code> lines
+        </label>
+      </li>
+      <li class="item">
+        <input type="checkbox" id="f1i3" data-key="fin-sanity">
+        <label class="task" for="f1i3"><span class="who">check</span>Read the summary before trusting it: <code>too_short</code> must be <b>false</b>, and <code>skipped_processes</code> should be a small number
+          <span class="unverified">If <code>gpu_available</code> is false on a GPU run, the GPU and VRAM figures are not measurements — re-run once the GPU check in the guide passes.</span>
+        </label>
+      </li>
+    </ul>
+    <div class="note">Feed the <b>.json</b> to LoadGen with <code>--profile</code>, then <code>--users N</code> derives every Target from what you just measured instead of the shipped guesses.</div>
+  </section>
+
+  <footer>
+    <span>Applications from a gold image inventory, v1.3 — its Standard Apps and GPU Apps sheets, Decommissioned rows excluded. Method from <code>GUIDE.md</code> Step 8.</span>
+    <span>Re-check the list against your own image before each round of testing.</span>
+  </footer>
+</div>
+
+<script>
+const HANDLE_DB = 'reference-session-checklist';
+const HANDLE_KEY = location.pathname;
+let pageHandle = null;
+
+function handleStore(mode, work) {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open(HANDLE_DB, 1);
+    open.onupgradeneeded = () => open.result.createObjectStore('handles');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const tx = open.result.transaction('handles', mode);
+      const request = work(tx.objectStore('handles'));
+      tx.oncomplete = () => { open.result.close(); resolve(request.result); };
+      tx.onerror = () => { open.result.close(); reject(tx.error); };
+    };
+  });
+}
+
+async function rememberedHandle() {
+  if (pageHandle) { return pageHandle; }
+  try {
+    const handle = await handleStore('readonly', store => store.get(HANDLE_KEY));
+    if (!handle) { return null; }
+    const access = {mode: 'readwrite'};
+    if (await handle.queryPermission(access) === 'granted') { return handle; }
+    if (await handle.requestPermission(access) === 'granted') { return handle; }
+  } catch (error) { /* nothing remembered, or the store is unavailable: pick afresh */ }
+  return null;
+}
+
+async function pickHandle() {
+  const handle = await window.showSaveFilePicker({
+    id: 'reference-session-checklist',
+    suggestedName: 'reference-session-checklist.html',
+    types: [{description: 'Checklist page', accept: {'text/html': ['.html']}}]
+  });
+  try { await handleStore('readwrite', store => store.put(handle, HANDLE_KEY)); }
+  catch (error) { /* remembering is a convenience; the save itself still happens */ }
+  return handle;
+}
+
+async function writePage(handle, page) {
+  const writable = await handle.createWritable();
+  await writable.write(page);
+  await writable.close();
+}
+
+async function saveTicks(button) {
+  document.querySelectorAll('input[type=checkbox][data-key]').forEach(box => {
+    if (box.checked) { box.setAttribute('checked', ''); } else { box.removeAttribute('checked'); }
+  });
+  const page = '<!doctype html>\n' + document.documentElement.outerHTML;
+
+  const said = (text) => {
+    button.textContent = text;
+    setTimeout(() => button.textContent = 'Save ticks', 2500);
+  };
+
+  if (window.showSaveFilePicker) {
+    try {
+      const remembered = await rememberedHandle();
+      if (remembered) {
+        await writePage(remembered, page);
+        pageHandle = remembered;
+        said('Saved');
+        return;
+      }
+    } catch (error) {
+      pageHandle = null;  // the remembered file moved or vanished: pick afresh below
+    }
+    try {
+      const picked = await pickHandle();
+      await writePage(picked, page);
+      pageHandle = picked;
+      said('Saved');
+      return;
+    } catch (error) {
+      if (error.name === 'AbortError') { return; }
+    }
+  }
+
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([page], {type: 'text/html'}));
+  link.download = 'reference-session-checklist.html';
+  link.click();
+  URL.revokeObjectURL(link.href);
+  said('Downloaded');
+}
+</script>
