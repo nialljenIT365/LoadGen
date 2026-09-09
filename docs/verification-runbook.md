@@ -105,16 +105,19 @@ For each Dial, read LoadGen's Actual and a second Consumer at the same moment.
 
 | Dial | LoadGen reads | Cross-check against |
 |---|---|---|
-| gpu | NVML utilization | `nvidia-smi --query-gpu=utilization.gpu --format=csv -l 2` |
+| gpu | Windows GPU Engine counter, Task Manager's figure | Task Manager GPU 0 graph; Perfmon `\GPU Engine(*)\Utilization Percentage` |
 | vram | NVML memory used/total | `nvidia-smi --query-gpu=memory.used --format=csv -l 2` |
 | cpu | `psutil.cpu_percent` | Task Manager; Perfmon `\Processor Information(_Total)\% Processor Utility` |
 | ram | `psutil.virtual_memory().percent` | Task Manager "In use" |
 
 Disagreement here invalidates everything downstream. Resolve it before step 3.
 
-The `tm` column is the Windows GPU Engine counter and is display-only; the
-Self-check never chases it. NVML and `tm` are expected to differ by 10 to 20
-points. Record that divergence as a finding, not a fault.
+The `nvml` column is NVML utilisation and is display-only; the Self-check
+never chases it. Step 0 on this host showed it swinging 0 to 100 under a
+constant load and reading near 0 at a duty of 0.3, while the GPU Engine
+counter followed the duty to within about 5 points. `nvidia-smi` reads the
+same NVML counter, so it is not a cross-check for the gpu Dial here. Record
+the NVML to Task Manager divergence as a finding, not a fault.
 
 ## Step 3 — one Dial at a time, then all four
 
