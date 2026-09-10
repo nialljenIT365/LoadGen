@@ -1,133 +1,268 @@
-# What is left to do, in plain language
+# Next steps — commands to run, files to change
 
-The job is to prove that LoadGen's four Dials do what they say: you ask for a
-percentage, and the tool a density tester actually looks at shows that
-percentage. Four Dials, four resources — GPU, VRAM, CPU, RAM.
+Two parts. Part A runs on the A10 host. Part B is edits to this repo, made on
+the workstation after Part A comes back.
 
-This page says what has been proved, what has not, and what to run next. The
-commands live in `docs\verification-scratchpad.md`. The reading rules live in
-`docs\verification-runbook.md`.
-
----
-
-## Where things stand
-
-**Settled.** The GPU meter question. LoadGen used to read the GPU through
-NVIDIA's own interface, NVML. On this A10-8Q that reading is junk: under a
-constant flat-out load it bounced between 0 and 100 and averaged a different
-number on every run. LoadGen now reads the same counter Task Manager shows,
-which followed the load properly. NVML is still printed, in brackets, so you
-can see it disagreeing.
-
-**Settled.** The memory leak into system RAM. Filling the graphics card's
-memory used to quietly spill into the machine's ordinary RAM — 88 GB of it,
-once. LoadGen now checks each new block and stops when the card is genuinely
-full.
-
-**Settled.** The box gets its memory back. After the spill, shared GPU memory
-is back to 0.1 GB, so nothing was stranded.
-
-**Not settled.** Everything about whether the Dials actually converge and hold.
-The GPU run on 9 September looked perfect, and that turned out to be the
-problem — see below.
+Host repo: `C:\Tools\LoadGen`. Every command is one line — paste one block at a
+time, PowerShell 5.1 swallows a multi-line paste. Captures go in
+`analysis\evidence\`, never `docs\`.
 
 ---
 
-## The trap in the run that looked perfect
+# Part A — host runs
 
-The 3-minute GPU run at Target 40 reported no error worth mentioning. It was
-not evidence.
+## A1. Pull
 
-LoadGen starts the GPU Dial at a sensible guess: if you ask for 40, it starts
-working 40% of the time. On this machine that guess lands almost exactly on
-40% as measured. So the Dial arrived at the right answer before the correcting
-loop did anything at all. The report said "converged in 0 seconds" because the
-very first reading was already correct.
+```
+git pull
+```
 
-A cold start can never test the loop. **The Target has to move while the tool
-is running.** That is the next run.
+```
+git log -1 --oneline
+```
 
-The same run also picked a bad number. This host is not idle — it is an RDP
-session, and the desktop alone keeps the GPU at 12 to 17%, spiking to 39%.
-Asking for 40 puts the load inside the background noise. Asking for 80 does
-not.
+**Pass:** `85ff5a7` or later.
 
 ---
 
-## The next four things to run, in order
+## A2. Retarget run — GPU 80 → 40 → 80
 
-### 1. Move the Target while it runs
+Needs two PowerShell windows, both at `C:\Tools\LoadGen`.
 
-Start the GPU Dial at 80. Two minutes in, change it to 40. Two minutes later,
-change it back to 80. Watch the number climb and fall.
+**Window 1**, start the run:
 
-This is the only test that shows the correcting loop working. It also covers
-the claim that you can retune a running test without restarting it.
+```
+python loadgen.py --gpu 80 --duration 6m --log analysis\run-2026-09-10-1030-gpu80-retarget.csv
+```
 
-**Done looks like:** the new Target takes effect within about 4 seconds, the
-reading reaches it within 20 seconds each way, and the internal `gpu_duty`
-figure in the log visibly moves instead of sitting still.
+**Window 2**, at about 2 minutes elapsed:
 
-**Expect 80 to read about 72.** The counter runs at roughly 0.9 times the
-work actually done. That is a known offset, not a failure.
+```
+python -c "import json; p=r'C:\Tools\LoadGen\targets.json'; d=json.load(open(p)); d['gpu']=40; json.dump(d, open(p,'w'), indent=2); print('gpu ->', d['gpu'])"
+```
 
-### 2. Check the VRAM reading against Task Manager
+**Window 2**, at about 4 minutes elapsed:
 
-LoadGen printed VRAM at 29% while Task Manager showed about 1.5 of 7.5 GB,
-which is 20%. Both are probably right — LoadGen counts memory Task Manager
-leaves out of that particular figure — but "probably" is not good enough for a
-findings document.
+```
+python -c "import json; p=r'C:\Tools\LoadGen\targets.json'; d=json.load(open(p)); d['gpu']=80; json.dump(d, open(p,'w'), indent=2); print('gpu ->', d['gpu'])"
+```
 
-Read both at the same moment and settle it.
+**Window 1**, after it exits:
 
-**Done looks like:** LoadGen's percentage matches `nvidia-smi`'s used-over-
-total within a point. If it does, Task Manager's Dedicated figure is the odd
-one out and the findings say so.
+```
+python analyse_csv.py analysis\run-2026-09-10-1030-gpu80-retarget.csv
+```
 
-### 3. Prove the Baseline idea works
+Capture:
 
-This is the central design claim. When you ask for 70%, LoadGen is not
-supposed to add 70% on top of whatever is already running — it is supposed to
-top the machine up *to* 70% and keep it there as the background moves.
+1. 4 console lines before the 80→40 change and 8 after.
+2. 4 console lines before the 40→80 change and 8 after.
+3. Task Manager → Performance → GPU 0 → the `Utilization` figure at the bottom
+   of the pane. Once while Target is 80, once while Target is 40.
+4. Every line containing `warning:`.
+5. The `released:` line, and `Utilization` within 5 s of exit.
+6. The full `analyse_csv.py` output.
 
-Run a Dial at a Target, add some unrelated load by hand, and check that
-LoadGen backs off rather than piling on. Then take the load away and check it
-fills the gap again.
+Pass:
 
-**Done looks like:** the monitoring tool stays on the Target throughout,
-rather than climbing when you add load.
-
-### 4. Prove it lets go
-
-Stop a run that is holding all four Dials, including one part-way through a
-big RAM fill. Check the machine returns to where it started and no stray
-`python.exe` is left behind.
-
-**Done looks like:** back to the idle figures within 5 seconds, and nothing
-left in Task Manager's Details tab.
+- No `warning:` line. One appearing means the counter genuinely failed.
+- Each new Target takes effect within 2 ticks, so 4 seconds.
+- The Actual reaches the new Target within 20 s, both directions.
+- Target 80 reads about 72. That is the 0.9 counter slope, not a miss.
 
 ---
 
-## After those, the paperwork
+## A3. VRAM Actual against nvidia-smi
 
-**Finish `docs\verification-findings.md`.** One section per Dial answering
-four questions: does the number LoadGen prints match what a monitoring tool
-shows, does it get to the Target, does it stay there, and does it release.
+Two windows.
 
-**Fix README.md and GUIDE.md.** Both still tell the reader that LoadGen steers
-by NVML and that the Task Manager figure is shown for interest only. That is
-backwards now. The findings list the exact sections.
+**Window 1**, a run that takes no load and only prints Actuals:
 
-**Rewrite step 0 of the runbook.** It currently asks whether the GPU reading
-can be trusted. That question has an answer, so it should state the answer.
-It should also stop telling people to look for a `Compute_0` graph in Task
-Manager — this host does not have one. The work shows up under `3D`.
+```
+python loadgen.py --gpu 0 --duration 90s
+```
+
+**Window 2**, while that runs:
+
+```
+nvidia-smi --query-gpu=memory.used,memory.total,utilization.gpu --format=csv,noheader,nounits -l 5
+```
+
+Capture 5 console lines from Window 1, the 5 `nvidia-smi` lines nearest them in
+time, and Task Manager `Dedicated GPU memory` at the same moment.
+
+**Pass:** LoadGen's `vram` Actual equals `memory.used / memory.total × 100`
+within 1 point.
 
 ---
 
-## The one thing to keep in mind
+## A4. Baseline absorption
 
-Every reading on this host is taken through an RDP session, and the session
-itself uses the machine. The CPU sat between 11 and 29% doing nothing, and the
-GPU between 12 and 17%. That is the Baseline, it is noisy, and it is why
-Targets for these tests should be well clear of it.
+Tests the ADR-0001 claim: a Target is the figure the monitoring tool shows, not
+an amount added on top.
+
+**Window 1:**
+
+```
+python loadgen.py --cpu 70 --duration 8m --log analysis\run-2026-09-10-1100-cpu70-absorb.csv
+```
+
+**Window 2**, at about 2 minutes, add unrelated CPU load:
+
+```
+python -c "import multiprocessing as mp, time; ps=[mp.Process(target=lambda: [x*x for x in iter(int,1)]) for _ in range(4)]; [p.start() for p in ps]; time.sleep(180); [p.terminate() for p in ps]; print('background load done')"
+```
+
+That runs 4 busy processes for 3 minutes then stops on its own.
+
+Capture:
+
+- Task Manager CPU % at 1 min (LoadGen alone), 3 min (LoadGen plus background),
+  and 7 min (LoadGen alone again).
+- Console lines at those three moments.
+- The `warning:` line if one appears.
+
+**Pass:** Task Manager CPU stays near 70 at all three moments. It must not
+climb toward 100 when the background load is added.
+
+Then the below-Baseline case. **Window 2**, while A4 is still running:
+
+```
+python -c "import json; p=r'C:\Tools\LoadGen\targets.json'; d=json.load(open(p)); d['cpu']=5; json.dump(d, open(p,'w'), indent=2); print('cpu ->', d['cpu'])"
+```
+
+**Pass:** one warning naming the Target, the Baseline, and that it is
+contributing nothing. It must print once, not every tick.
+
+---
+
+## A5. Release on exit
+
+**Window 1:**
+
+```
+python loadgen.py --gpu 60 --vram 50 --cpu 60 --ram 70
+```
+
+Let it reach steady state, then press Ctrl+C.
+
+**Window 2**, within 5 seconds of the Ctrl+C:
+
+```
+nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits
+```
+
+```
+Get-Process python -ErrorAction SilentlyContinue | Select-Object Id, ProcessName, WorkingSet
+```
+
+Capture the `released:` line, both command outputs, and Task Manager CPU,
+Memory, GPU 0.
+
+Repeat once, pressing Ctrl+C while the RAM fill is still climbing rather than
+at steady state.
+
+Pass:
+
+- `released:` line appears.
+- `nvidia-smi` back to the A3 idle figures.
+- No `python.exe` left in `Get-Process`.
+- All within 5 seconds.
+
+---
+
+## A6. Users derivation
+
+```
+python loadgen.py --users 15 --duration 2m --log analysis\run-2026-09-10-1130-users15.csv
+```
+
+Capture the first console line, which shows the derived Targets.
+
+**Pass:** gpu 60, cpu 90, vram about 55, ram about 34.
+
+---
+
+## A7. All four Dials
+
+```
+python loadgen.py --gpu 70 --vram 70 --cpu 70 --ram 70 --duration 5m --log analysis\run-2026-09-10-1140-all70.csv
+```
+
+```
+python analyse_csv.py analysis\run-2026-09-10-1140-all70.csv
+```
+
+Capture every `warning:` line, the `released:` line, and within 5 s of exit:
+Task Manager CPU %, Memory GB, GPU 0 %, Dedicated GPU memory, Shared GPU
+memory.
+
+Pass, per `docs\verification-runbook.md`: cpu within ±5, ram within ±2, gpu
+within ±10, vram within ±3.
+
+---
+
+# Part B — repo edits
+
+Made on the workstation, after Part A. Line numbers are as at `d6be9c8`.
+
+## B1. README.md
+
+| Line | Now | Change to |
+|---|---|---|
+| 80 | `gpu` Actual read from ``NVML `nvmlDeviceGetUtilizationRates().gpu` `` | Windows `\GPU Engine(*)\Utilization Percentage` via PDH, busiest engine type |
+| 210 | sample line shows `(tm  55)` | `(nvml  55)` — the console column was renamed |
+| 213-214 | "`tm` is the Windows GPU Engine counter… It is display-only; the Self-check chases NVML." | `nvml` is NVML utilisation and is display-only; the Self-check chases the GPU Engine counter |
+| 233 | "NVML utilization inside the…" time-slicing explanation | Replace with the measured result: NVML does not track this guest's work at all, 0 to 100 under constant load |
+| 239-240 | "can differ from NVML by 10 to 20 points. The script chases NVML" | The two measure different things, not a fixed offset. The script chases the engine counter |
+| 265-267 | "every GPU and VRAM path is unverified" | Narrow to what is still unverified after this round |
+
+## B2. GUIDE.md
+
+| Line | Now | Change to |
+|---|---|---|
+| 463-469, 477, 611-618 | sample output shows `(tm  N)` | `(nvml  N)` throughout |
+| 494-496 | "`tm` is Task Manager's GPU figure… shown for information only — LoadGen steers by the NVML number (the `gpu` Actual), not by `tm`. The two routinely differ by 10 to 20 points." | Invert: the `gpu` Actual **is** Task Manager's figure; `nvml` is the display-only column. Drop the 10-to-20-point claim |
+| 407 | `nvidia-ml-py` "reads the GPU through NVML, the same interface" | Keep — NVML still supplies the VRAM Actual. Add that GPU utilisation does not come from it |
+| 801-813 | `gpu`/`vram` show `--` troubleshooting | Check the `gpu` case still describes the engine counter, not NVML |
+| 880 | "`gpu` Actual stays `--`… NVML cannot read utilisation" and "This path is unverified on real hardware" | Cause is the GPU Engine counter, not NVML. Remove "unverified" — A2 covers it |
+| 881 | "`tm` differs from the `gpu` Actual by 10–20 points… LoadGen steers by the NVML figure." | Delete the row or invert it |
+| 943 | "the NVML-to-GPU-Engine ratio" in the unverified list | Update to what remains unverified |
+
+## B3. docs\verification-runbook.md
+
+| Line | Change |
+|---|---|
+| 40 | Heading `## Step 0 — is the gpu Actual trustworthy` → state the answer, not the question |
+| 73 | "set one Task Manager GPU graph to Compute_0 (or Cuda)" → this host offers only `3D`, `Copy`, `Video Encode`, `Video Decode`. CUDA work appears under `3D`. Delete the Compute_0 instruction |
+| 116 | Already correct — leave |
+
+## B4. docs\verification-findings.md
+
+Replace the `## Pending` section with results. One subsection per Dial, each
+answering four questions:
+
+1. Does the printed Actual agree with an independent Consumer?
+2. Does it reach the Target?
+3. How accurately does it hold?
+4. Does it release on exit?
+
+Then sections for Baseline absorption (A4), live retargeting (A2), release
+(A5), the Users derivation (A6), and the environment record.
+
+Environment record, already captured:
+
+```
+Driver           574.24 (NVML) / 32.0.15.7424 (WDDM), dated 7/6/2026
+GPU              NVIDIA A10-8Q, 8192 MiB
+torch            2.14.0+cu126, CUDA 12.6, torch.cuda.is_available() True
+Engine types     3D, Copy, Video Encode, Video Decode. No Compute_0.
+Host             12 logical CPUs, 110 GB RAM
+Idle Baseline    CPU 11-29%, GPU Utilization 12-17% with spikes to 39%,
+                 NVML util 0-12 mean 0.9, memory.used 1036-1150 MiB,
+                 Shared GPU memory 0.1/88.0 GB
+```
+
+Idle is not idle here: the readings above are taken through an RDP session and
+the session itself uses the machine. Test Targets need to sit clear of that,
+which is why A2 uses 80 rather than 40.
