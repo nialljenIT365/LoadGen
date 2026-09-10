@@ -28,6 +28,11 @@ rules, `docs\verification-findings.md` for what is already settled.
 Every command below is a single line. Paste one block at a time: PowerShell
 5.1 swallows a multi-line paste as one input.
 
+Screenshots and CSVs go in `analysis\evidence\`, never in `docs\`. The global
+gitignore excludes `analysis\`, so they stay off the repo; hand them over by
+attaching them rather than by committing them. Paste console text straight
+into the Result blocks — it reads faster than a picture of itself.
+
 Cheap read-only items come first, then the idle Baseline, then the load runs.
 The Baseline is the reference the load runs are judged against, so it has to
 exist before them.
