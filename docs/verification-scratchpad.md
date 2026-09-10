@@ -41,7 +41,7 @@ exist before them.
 
 ## 1. Pull
 
-- [ ] Host is on `91850da` or later.
+- [x] Host is on `91850da` or later.
 
 ```
 git pull
@@ -61,33 +61,38 @@ a9d7fea (HEAD -> main, origin/main, origin/HEAD) docs: next steps as a procedure
 
 For the findings. All read-only; changes nothing. Safe to run now.
 
-- [ ] Driver, GPU name, frame buffer:
+- [x] Driver, GPU name, frame buffer:
 
 ```
 nvidia-smi --query-gpu=driver_version,name,memory.total --format=csv,noheader
 ```
 
-- [ ] Torch and CUDA:
+- [x] Torch and CUDA:
 
 ```
 python -c "import torch; print('torch', torch.__version__, 'cuda', torch.version.cuda, 'available', torch.cuda.is_available())"
 ```
 
-- [ ] What is already in `analysis\` on the host:
+- [x] What is already in `analysis\` on the host:
 
 ```
 Get-ChildItem analysis -Recurse -File | Select-Object FullName, Length, LastWriteTime | Format-Table -AutoSize
 ```
 
-- [ ] Task Manager → Performance → GPU 0 → click the `3D` dropdown. List every
+- [x] Task Manager → Performance → GPU 0 → click the `3D` dropdown. List every
   engine name offered.
-- [ ] NVIDIA Control Panel, if installed → Manage 3D Settings → is there a
+- [x] NVIDIA Control Panel, if installed → Manage 3D Settings → is there a
   `CUDA - Sysmem Fallback Policy` entry, and what is it set to? If the Control
   Panel is not installed, say so.
 
 Result:
 
 ```
+574.24, NVIDIA A10-8Q, 8192 MiB
+torch 2.14.0+cu126 cuda 12.6 available True
+C:\Tools\LoadGen\analysis\run-2026-09-09-1740-gpu40.csv
+Review AllEnginesOffered.png
+Cuda System fallback Policy is Driver default
 ```
 
 ## 3. Step 1 Baseline
@@ -96,7 +101,7 @@ Idle box, LoadGen not running, nothing else heavy. Two minutes, 24 samples,
 aggregated by the one-liner. This is the reference every later release check
 is read against.
 
-- [ ] Done.
+- [x] Done.
 
 ```
 $rows = foreach ($i in 1..24) { nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader,nounits; Start-Sleep 5 }; $u = $rows | ForEach-Object { [int]($_ -split ',')[0] }; $m = $rows | ForEach-Object { [int]($_ -split ',')[1] }; "util.gpu  min $(($u | Measure-Object -Minimum).Minimum)  max $(($u | Measure-Object -Maximum).Maximum)  mean $([math]::Round(($u | Measure-Object -Average).Average,1))  nonzero $(($u | Where-Object { $_ -gt 0 }).Count)/24"; "mem.used  min $(($m | Measure-Object -Minimum).Minimum)  max $(($m | Measure-Object -Maximum).Maximum) MiB"
@@ -116,6 +121,12 @@ Save one Task Manager screenshot as
 Result:
 
 ```
+CPU Low - 8% CPU High 18%
+GPU Low - 9% GPU High 26%
+Memory in use 12GB (10%) Static
+docs\run-2026-09-10-1140-baseline.png`
+util.gpu  min 0  max 4  mean 0.4  nonzero 4/24
+mem.used  min 1233  max 1265 MiB
 ```
 
 ## 4. gpu 40 closed-loop run
@@ -124,10 +135,10 @@ First execution of `1ce4f25` on real hardware: the gpu Actual is now Task
 Manager's GPU Engine counter. Target 40 is the case that used to burn the
 whole vGPU while printing 0.
 
-- [ ] Run for 3 minutes. Change `1530` to the launch time.
+- [x] Run for 3 minutes. Change `1530` to the launch time.
 
 ```
-python loadgen.py --gpu 40 --duration 3m --log analysis\run-2026-09-09-1530-gpu40.csv
+python loadgen.py --gpu 40 --duration 3m --log analysis\run-2026-09-10-1143-gpu40.csv
 ```
 
 Capture while it runs:
@@ -150,6 +161,20 @@ item 3 Baseline on exit.
 Result:
 
 ```
+cpu: 12 workers started
+11:43:56  gpu  40/ -- (nvml   1) | vram   0/ 30 | cpu   0/  0 | ram   0/ 11
+11:43:58  gpu  40/ 30 (nvml   0) | vram   0/ 30 | cpu   0/ 23 | ram   0/ 11
+11:44:00  gpu  40/ 42 (nvml   0) | vram   0/ 30 | cpu   0/ 11 | ram   0/ 11
+11:44:02  gpu  40/ 41 (nvml   0) | vram   0/ 30 | cpu   0/ 12 | ram   0/ 11
+11:44:04  gpu  40/ 40 (nvml   0) | vram   0/ 30 | cpu   0/ 11 | ram   0/ 11
+
+no warnings
+
+duration reached after 180s
+released: cpu workers stopped, ram and vram blocks dropped
+
+Task Manager screenshots available in Docs folder on repo with prefix.4
+
 ```
 
 ---
