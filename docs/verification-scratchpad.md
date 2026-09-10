@@ -53,7 +53,8 @@ git log -1 --oneline
 
 Result:
 
-``` 
+```
+a9d7fea (HEAD -> main, origin/main, origin/HEAD) docs: next steps as a procedure - seven host runs, then the file edits by line
 ```
 
 ## 2. Environment record
